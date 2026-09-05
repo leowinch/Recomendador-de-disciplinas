@@ -1,0 +1,69 @@
+# ==========================================
+# 1. Variáveis de Ambiente e Segredos (CRÍTICO)
+# ==========================================
+.env
+.env.*
+!.env.example
+
+# ==========================================
+# 2. Ambientes Virtuais do Python
+# ==========================================
+venv/
+.venv/
+env/
+ENV/
+env.bak/
+venv.bak/
+
+# ==========================================
+# 3. Cache do Python e Compilação
+# ==========================================
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+
+# ==========================================
+# 4. Modelos de Machine Learning & Cache de Treino
+# ==========================================
+# Caso você salve o modelo K-Means ou matrizes localmente com joblib/pickle
+*.pkl
+*.joblib
+*.npy
+*.npz
+
+# ==========================================
+# 5. Configurações de IDEs e Editores
+# ==========================================
+# VS Code
+.vscode/
+!.vscode/settings.json
+!.vscode/tasks.json
+!.vscode/launch.json
+!.vscode/extensions.json
+*.code-workspace
+
+# PyCharm / JetBrains
+.idea/
+
+# ==========================================
+# 6. Logs e Testes
+# ==========================================
+*.log
+.pytest_cache/
+.coverage
+htmlcov/
+.mypy_cache/
+.ruff_cache/
+
+# ==========================================
+# 7. Arquivos do Sistema Operacional
+# ==========================================
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
