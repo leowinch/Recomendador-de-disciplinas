@@ -4,6 +4,10 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>UFSM — Recomendação de Disciplinas</title>
+
+<script src="https://unpkg.com/htmx.org@1.9.10"></script>
+<script src="https://unpkg.com/htmx.org/dist/ext/json-enc.js"></script>
+
 <link href="https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
 <style>
 :root {
@@ -75,6 +79,7 @@ body{font-family:'DM Sans',sans-serif;background:var(--fundo);color:var(--texto)
   cursor:pointer;display:flex;align-items:center;justify-content:center;gap:7px;transition:background 0.2s;
 }
 .btn-p:hover{background:var(--verde-med);}
+.btn-p:disabled{opacity:0.6;cursor:not-allowed;}
 .btn-s{
   padding:6px 12px;background:white;color:var(--verde);border:1px solid var(--verde);
   border-radius:7px;font-size:12px;font-weight:500;font-family:'DM Sans',sans-serif;
@@ -108,34 +113,20 @@ body{font-family:'DM Sans',sans-serif;background:var(--fundo);color:var(--texto)
 .ap{background:#FFE0EE;color:#7D1040;}
 .at{background:#CCFBF1;color:#0F4F3E;}
 
-/* FILTROS */
-.filtros-wrap{display:flex;flex-wrap:wrap;gap:5px;margin-bottom:12px;}
-.fbtn{
-  padding:4px 10px;border-radius:20px;font-size:11px;font-weight:500;
-  border:1px solid var(--borda);background:white;color:var(--texto-sec);
-  cursor:pointer;font-family:'DM Sans',sans-serif;transition:all 0.15s;white-space:nowrap;
+/* RANKING / CLUSTERS */
+.cluster-grupo{margin-bottom:14px;}
+.cluster-label{
+  font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:0.06em;
+  color:var(--texto-sec);margin-bottom:6px;
 }
-.fbtn:hover{border-color:var(--verde-claro);color:var(--verde);}
-.fbtn.on{background:var(--verde);color:white;border-color:var(--verde);}
-
-/* RANKING */
 .ri{
   display:flex;align-items:center;padding:8px 7px;border-bottom:1px solid var(--borda);
-  gap:9px;cursor:pointer;transition:background 0.15s;border-radius:7px;margin:0 -7px;
+  gap:9px;transition:background 0.15s;border-radius:7px;margin:0 -7px;
 }
 .ri:hover{background:var(--fundo);}
-.rpos{
-  width:22px;height:22px;border-radius:50%;
-  display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:600;flex-shrink:0;
-}
-.p1{background:#FFF0B0;color:#7D5A00;} .p2{background:#EAE8E4;color:#4A4844;}
-.p3{background:#FFE0CC;color:#7D3B10;} .pn{background:var(--fundo);color:var(--texto-sec);font-size:9px;}
 .rinfo{flex:1;min-width:0;}
 .rnome{font-size:12px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
 .rcod{font-size:10px;color:var(--texto-sec);}
-.snum{font-size:13px;font-weight:700;color:var(--verde);text-align:right;}
-.sbg{height:3px;background:var(--borda);border-radius:2px;margin-top:3px;width:60px;}
-.sfill{height:100%;border-radius:2px;background:var(--verde-claro);}
 .badd{
   background:var(--verde-palido);color:var(--verde);border:1px solid #B7E4C7;
   border-radius:5px;padding:3px 7px;font-size:10px;font-weight:500;
@@ -143,12 +134,6 @@ body{font-family:'DM Sans',sans-serif;background:var(--fundo);color:var(--texto)
 }
 .badd:hover{background:var(--verde);color:white;}
 .bja{background:#D8F3DC;color:#1B4332;border:1px solid #B7E4C7;border-radius:5px;padding:3px 7px;font-size:10px;font-weight:500;flex-shrink:0;}
-
-/* OBRIG */
-.oi{display:flex;align-items:center;gap:8px;padding:8px 10px;border-radius:8px;margin-bottom:6px;background:#FFF8E6;border:1px solid #F0D880;}
-.oi-urg{background:#FFF1F1;border-color:#F9B8B8;}
-.obadge{padding:2px 8px;border-radius:20px;font-size:10px;font-weight:600;white-space:nowrap;flex-shrink:0;}
-.oba{background:#FEF3C7;color:#78350F;} .obu{background:#FEE2E2;color:#991B1B;}
 
 /* TABS */
 .tab-bar{display:flex;gap:2px;background:var(--fundo);border-radius:7px;padding:2px;}
@@ -173,7 +158,7 @@ body{font-family:'DM Sans',sans-serif;background:var(--fundo);color:var(--texto)
   display:flex;align-items:center;justify-content:center;font-size:9px;cursor:pointer;flex-shrink:0;
 }
 
-/* MODAL */
+/* MODAL (busca manual) */
 .mwrap{
   display:none;position:fixed;inset:0;z-index:300;
   background:rgba(0,0,0,0.45);align-items:center;justify-content:center;
@@ -218,12 +203,22 @@ body{font-family:'DM Sans',sans-serif;background:var(--fundo);color:var(--texto)
 }
 .toast.show{transform:translateY(0);opacity:1;}
 
+/* htmx loading indicator */
+.htmx-indicator{opacity:0;transition:opacity 0.15s;}
+.htmx-request.htmx-indicator, .htmx-request .htmx-indicator{opacity:1;}
+
 ::-webkit-scrollbar{width:4px;height:4px;}
 ::-webkit-scrollbar-track{background:transparent;}
 ::-webkit-scrollbar-thumb{background:#D0CFC8;border-radius:99px;}
 </style>
 </head>
-<body>
+
+<!--
+  hx-headers injeta o CSRF token do Django em toda requisição feita a partir
+  deste <body> (POST/PUT/DELETE exigem isso). Isto só funciona se esse arquivo
+  for servido via template do Django (ex: TemplateView), não como HTML estático puro.
+-->
+<body hx-headers='{"X-CSRFToken": "{{ csrf_token }}"}'>
 
 <!-- TÍTULO -->
 <div class="page-title-bar">
@@ -237,7 +232,7 @@ body{font-family:'DM Sans',sans-serif;background:var(--fundo);color:var(--texto)
   <!-- SIDEBAR -->
   <div class="sidebar">
 
-    <!-- UPLOAD -->
+    <!-- UPLOAD (endpoint de upload ainda não existe — mantido como simulação local) -->
     <div class="ss">
       <div class="st"><span class="sbadge">📄</span> Histórico Escolar</div>
       <div class="upload-area">
@@ -248,23 +243,22 @@ body{font-family:'DM Sans',sans-serif;background:var(--fundo);color:var(--texto)
         <input type="file" id="fileInput" accept=".pdf" onchange="handleUpload(this)">
       </div>
       <div id="uploadStatus" style="display:none;margin-top:8px;padding:7px 9px;background:#D8F3DC;border-radius:7px;font-size:11px;color:#1B4332;align-items:center;gap:6px;">
-        ✅ historico_joao.pdf — <strong>38 disciplinas</strong> importadas
+        ✅ arquivo importado — <strong id="uploadCount">0 disciplinas</strong>
       </div>
     </div>
 
-    <!-- CURSADAS -->
+    <!-- CURSADAS: hoje é o estado que alimenta 'codigos' no POST /api/recomendar/ -->
     <div class="ss">
-      <div class="st"><span class="sbadge">✓</span> Já Cursadas <span style="margin-left:auto;font-size:11px;font-weight:600;color:var(--verde);">38</span></div>
-      <div class="tags-wrap">
-        <span class="dtag">Cálculo I</span><span class="dtag">Álgebra Linear</span>
-        <span class="dtag">Prog. I</span><span class="dtag">Prog. II</span>
-        <span class="dtag">Estrut. Dados</span><span class="dtag">BD I</span>
-        <span class="dtag">Redes I</span><span class="dtag">SO</span>
-        <span class="dtag">Eng. Software</span><span class="dtag">+29 mais</span>
+      <div class="st"><span class="sbadge">✓</span> Já Cursadas <span style="margin-left:auto;font-size:11px;font-weight:600;color:var(--verde);" id="cursadasCount">3</span></div>
+      <div class="tags-wrap" id="cursadasTags">
+        <span class="dtag">ELC1010</span><span class="dtag">ELC1020</span><span class="dtag">ELC1030</span>
+      </div>
+      <div style="font-size:10px;color:var(--texto-sec);margin-top:6px;line-height:1.4;">
+        Lista fixa por enquanto — deve vir do upload do histórico quando esse endpoint existir.
       </div>
     </div>
 
-    <!-- ADICIONAR -->
+    <!-- ADICIONAR (busca manual — usa o catálogo local de exemplo DISC) -->
     <div class="ss">
       <div class="st"><span class="sbadge">＋</span> Adicionar Disciplina</div>
       <div style="position:relative;">
@@ -274,9 +268,21 @@ body{font-family:'DM Sans',sans-serif;background:var(--fundo);color:var(--texto)
       <div id="discResultados" style="max-height:150px;overflow-y:auto;margin-top:5px;"></div>
     </div>
 
-    <!-- RECOMENDAR -->
+    <!-- RECOMENDAR — integrado via htmx ao POST /api/recomendar/ -->
     <div class="ss">
-      <button class="btn-p" onclick="mostrarRecomendacoes()">✨ Pedir Recomendação</button>
+      <button class="btn-p"
+              id="btnRecomendar"
+              hx-ext="json-enc"
+              hx-post="/api/recomendar/"
+              hx-vals='js:{codigos: getCodigosCursados()}'
+              hx-swap="none"
+              hx-indicator="#recLoading"
+              hx-disabled-elt="this">
+        ✨ Pedir Recomendação
+      </button>
+      <p id="recLoading" class="htmx-indicator" style="font-size:10px;color:var(--texto-sec);text-align:center;margin-top:5px;">
+        Analisando histórico…
+      </p>
       <p style="font-size:10px;color:var(--texto-sec);text-align:center;margin-top:5px;line-height:1.5;">O sistema analisa seu histórico e sugere as melhores disciplinas</p>
     </div>
 
@@ -297,7 +303,8 @@ body{font-family:'DM Sans',sans-serif;background:var(--fundo);color:var(--texto)
   <!-- MAIN -->
   <div class="main-content">
 
-    <!-- GRADE -->
+    <!-- GRADE: só preenche para disciplinas que têm horário (hoje só as adicionadas via busca manual,
+         já que /api/recomendar/ não devolve turma/horário ainda) -->
     <div class="card">
       <div class="card-h">
         <div class="card-t">📅 Grade Horária — 2024/2</div>
@@ -311,7 +318,7 @@ body{font-family:'DM Sans',sans-serif;background:var(--fundo);color:var(--texto)
       </div>
       <div class="card-b" style="padding:10px;">
         <div id="gradeView">
-          <div id="gradeEmpty" class="empty"><div class="empty-i">🗓️</div><div class="empty-t">Grade vazia</div><div class="empty-s">Adicione disciplinas para ver a grade</div></div>
+          <div id="gradeEmpty" class="empty"><div class="empty-i">🗓️</div><div class="empty-t">Grade vazia</div><div class="empty-s">Adicione disciplinas com horário definido</div></div>
           <div style="overflow-x:auto;">
             <table class="grade-table" id="gradeTable" style="display:none;">
               <thead><tr>
@@ -326,42 +333,28 @@ body{font-family:'DM Sans',sans-serif;background:var(--fundo);color:var(--texto)
       </div>
     </div>
 
-    <!-- OBRIGATORIAS -->
-    <div class="card" id="obrigCard" style="display:none;">
-      <div class="card-h">
-        <div class="card-t">⚠️ Obrigatórias Pendentes</div>
-        <span style="font-size:10px;color:var(--texto-sec);background:var(--fundo);padding:3px 9px;border-radius:20px;border:1px solid var(--borda);">Recomendadas pelo sistema</span>
-      </div>
-      <div class="card-b" id="obrigBody"></div>
-    </div>
+    <!--
+      OBRIGATÓRIAS PENDENTES — desligado por enquanto.
+      Precisa de uma URL tipo GET /api/obrigatorias-pendentes/ que compare o
+      currículo do curso com o histórico do aluno. Reativar quando existir.
+    -->
 
-    <!-- RANKING -->
+    <!-- RESULTADO DA RECOMENDAÇÃO (clusters vindos de /api/recomendar/) -->
     <div class="card" id="rankingCard" style="display:none;">
       <div class="card-h">
-        <div class="card-t">🏆 Ranking de Recomendações</div>
+        <div class="card-t">🏆 Disciplinas Recomendadas</div>
         <span style="font-size:10px;color:var(--texto-sec);background:var(--fundo);padding:3px 9px;border-radius:20px;border:1px solid var(--borda);" id="rankingInfo">—</span>
       </div>
       <div class="card-b">
         <div style="font-size:11px;color:#78350F;margin-bottom:10px;padding:8px 10px;background:#FFF8E6;border-radius:7px;border-left:3px solid var(--ouro);">
-          💡 Clique em qualquer disciplina para ver a análise completa e o motivo da recomendação.
+          💡 Disciplinas agrupadas por similaridade com o que você já cursou.
         </div>
-        <div style="font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:0.07em;color:var(--texto-sec);margin-bottom:5px;">Filtrar por</div>
-        <div class="filtros-wrap">
-          <button class="fbtn on" onclick="setFiltro(this,'todos')">Todos</button>
-          <button class="fbtn" onclick="setFiltro(this,'obrig')">Obrigatórias</button>
-          <button class="fbtn" onclick="setFiltro(this,'opta')">Optativas</button>
-          <button class="fbtn" onclick="setFiltro(this,'seg')">Segunda</button>
-          <button class="fbtn" onclick="setFiltro(this,'ter')">Terça</button>
-          <button class="fbtn" onclick="setFiltro(this,'qua')">Quarta</button>
-          <button class="fbtn" onclick="setFiltro(this,'qui')">Quinta</button>
-          <button class="fbtn" onclick="setFiltro(this,'sex')">Sexta</button>
-          <button class="fbtn" onclick="setFiltro(this,'manha')">Manhã</button>
-          <button class="fbtn" onclick="setFiltro(this,'tarde')">Tarde</button>
-          <button class="fbtn" onclick="setFiltro(this,'sem_conflito')">Sem conflito</button>
-          <button class="fbtn" onclick="setFiltro(this,'infra')">Infraestrutura</button>
-          <button class="fbtn" onclick="setFiltro(this,'ia')">IA & Dados</button>
-          <button class="fbtn" onclick="setFiltro(this,'dev')">Desenvolvimento</button>
-        </div>
+        <!--
+          Filtros por tipo/área/dia/turno desligados — dependem de campos (tipo,
+          area, slots) que a API ainda não devolve para os clusters. Reativar
+          quando /api/recomendar/ (ou uma URL de detalhe da disciplina) trouxer
+          esses dados.
+        -->
         <div id="rankingList"></div>
       </div>
     </div>
@@ -369,7 +362,7 @@ body{font-family:'DM Sans',sans-serif;background:var(--fundo);color:var(--texto)
   </div><!-- /main -->
 </div><!-- /app-wrap -->
 
-<!-- MODAL ADICIONAR DISC -->
+<!-- MODAL ADICIONAR DISC (busca manual) -->
 <div class="mwrap" id="modalDisc" onclick="fecharModalDisc()">
   <div class="modal" onclick="event.stopPropagation()">
     <div class="mhead">
@@ -384,18 +377,6 @@ body{font-family:'DM Sans',sans-serif;background:var(--fundo);color:var(--texto)
   </div>
 </div>
 
-<!-- MODAL FEEDBACK -->
-<div class="mwrap" id="modalFeedback" onclick="fecharModalFeedback()">
-  <div class="modal" onclick="event.stopPropagation()">
-    <div class="mhead">
-      <div><div class="mhtitle" id="mfTitle"></div><div class="mhsub" id="mfSub"></div></div>
-      <div class="mclose" onclick="fecharModalFeedback()">✕</div>
-    </div>
-    <div class="mbody" id="mfBody"></div>
-    <div class="mfoot" id="mfFooter"></div>
-  </div>
-</div>
-
 <!-- TOAST -->
 <div class="toast" id="toast"></div>
 
@@ -403,49 +384,124 @@ body{font-family:'DM Sans',sans-serif;background:var(--fundo);color:var(--texto)
 const HORARIOS=['07:30','08:30','09:30','10:30','11:30','13:00','14:00','15:00','16:00','17:00'];
 const DIAS=['Seg','Ter','Qua','Qui','Sex'];
 
+/*
+  Catálogo local usado SÓ pela busca manual ("Adicionar Disciplina"), que ainda
+  não tem endpoint no Django. Quando existir (ex: GET /api/disciplina/?q=),
+  troca filtrarDisc() por uma chamada htmx e remove este array.
+*/
 const DISC=[
-  {id:1,cod:'ELC1045',nome:'Sistemas Operacionais II',cred:4,slots:[['Ter','08:30'],['Qui','08:30']],cor:'aa',prof:'Dr. Marco Aurélio',sala:'CT-201',tipo:'obrig',area:'infra'},
-  {id:2,cod:'ELC1067',nome:'Redes de Computadores II',cred:4,slots:[['Seg','10:30'],['Qua','10:30']],cor:'av',prof:'Dra. Carla Freitas',sala:'CT-305',tipo:'obrig',area:'infra'},
-  {id:3,cod:'ELC1089',nome:'Inteligência Artificial',cred:4,slots:[['Ter','10:30'],['Qui','10:30']],cor:'ar',prof:'Dr. Pedro Vidal',sala:'CT-102',tipo:'opta',area:'ia'},
-  {id:4,cod:'ELC1102',nome:'Compiladores',cred:4,slots:[['Seg','14:00'],['Qua','14:00']],cor:'al',prof:'Dr. Renato Cerqueira',sala:'CT-204',tipo:'obrig',area:'infra'},
-  {id:5,cod:'ELC1115',nome:'Computação Gráfica',cred:4,slots:[['Ter','14:00'],['Sex','14:00']],cor:'ap',prof:'Dra. Ana Lúcia',sala:'CT-Lab2',tipo:'opta',area:'dev'},
-  {id:6,cod:'ELC1033',nome:'Teoria dos Grafos',cred:4,slots:[['Qua','08:30'],['Sex','08:30']],cor:'aa',prof:'Dr. Luis Henrique',sala:'CT-108',tipo:'opta',area:'ia'},
-  {id:7,cod:'ELC1071',nome:'Segurança da Informação',cred:4,slots:[['Seg','08:30'],['Qui','14:00']],cor:'av',prof:'Dr. Fábio Borges',sala:'CT-303',tipo:'obrig',area:'infra'},
-  {id:8,cod:'ELC1099',nome:'Desenvolvimento Web',cred:4,slots:[['Ter','08:30'],['Sex','10:30']],cor:'al',prof:'Dra. Juliana Pires',sala:'CT-Lab1',tipo:'opta',area:'dev'},
-  {id:9,cod:'ELC1120',nome:'Machine Learning',cred:4,slots:[['Seg','14:00'],['Sex','14:00']],cor:'at',prof:'Dr. Bruno Farias',sala:'CT-Lab3',tipo:'opta',area:'ia'},
-  {id:10,cod:'ELC1088',nome:'Banco de Dados II',cred:4,slots:[['Ter','14:00'],['Qui','14:00']],cor:'aa',prof:'Dra. Renata Lopes',sala:'CT-207',tipo:'obrig',area:'dev'},
+  {cod:'ELC1045',nome:'Sistemas Operacionais II',cred:4,slots:[['Ter','08:30'],['Qui','08:30']],cor:'aa',prof:'Dr. Marco Aurélio',sala:'CT-201',tipo:'obrig'},
+  {cod:'ELC1067',nome:'Redes de Computadores II',cred:4,slots:[['Seg','10:30'],['Qua','10:30']],cor:'av',prof:'Dra. Carla Freitas',sala:'CT-305',tipo:'obrig'},
+  {cod:'ELC1089',nome:'Inteligência Artificial',cred:4,slots:[['Ter','10:30'],['Qui','10:30']],cor:'ar',prof:'Dr. Pedro Vidal',sala:'CT-102',tipo:'opta'},
+  {cod:'ELC1102',nome:'Compiladores',cred:4,slots:[['Seg','14:00'],['Qua','14:00']],cor:'al',prof:'Dr. Renato Cerqueira',sala:'CT-204',tipo:'obrig'},
+  {cod:'ELC1115',nome:'Computação Gráfica',cred:4,slots:[['Ter','14:00'],['Sex','14:00']],cor:'ap',prof:'Dra. Ana Lúcia',sala:'CT-Lab2',tipo:'opta'},
+  {cod:'ELC1033',nome:'Teoria dos Grafos',cred:4,slots:[['Qua','08:30'],['Sex','08:30']],cor:'aa',prof:'Dr. Luis Henrique',sala:'CT-108',tipo:'opta'},
+  {cod:'ELC1071',nome:'Segurança da Informação',cred:4,slots:[['Seg','08:30'],['Qui','14:00']],cor:'av',prof:'Dr. Fábio Borges',sala:'CT-303',tipo:'obrig'},
+  {cod:'ELC1099',nome:'Desenvolvimento Web',cred:4,slots:[['Ter','08:30'],['Sex','10:30']],cor:'al',prof:'Dra. Juliana Pires',sala:'CT-Lab1',tipo:'opta'},
+  {cod:'ELC1120',nome:'Machine Learning',cred:4,slots:[['Seg','14:00'],['Sex','14:00']],cor:'at',prof:'Dr. Bruno Farias',sala:'CT-Lab3',tipo:'opta'},
+  {cod:'ELC1088',nome:'Banco de Dados II',cred:4,slots:[['Ter','14:00'],['Qui','14:00']],cor:'aa',prof:'Dra. Renata Lopes',sala:'CT-207',tipo:'obrig'},
 ];
 
-const RECS=[
-  {id:3,score:94,pros:['Pré-requisitos 100% completos','Alta demanda no mercado','Complementa Estrutura de Dados e Prog. II','Nota média alta na turma (8.2)','Professor bem avaliado pelos alunos'],cons:['Carga de projetos elevada','Provas difíceis sem monitoria disponível'],motivo:'IA tem sinergia direta com suas disciplinas de Prog. II e Estrutura de Dados. O perfil do seu histórico indica aptidão para área algorítmica.'},
-  {id:7,score:88,pros:['Pré-requisitos atendidos','Área com crescimento forte no mercado','Complementa Redes I já cursada'],cons:['Horário do Qui tarde pode conflitar dependendo de outras escolhas'],motivo:'Segurança da Informação é essencial para o perfil de SI. Você já tem a base necessária em Redes.'},
-  {id:2,score:82,pros:['Continuação direta de Redes I (já cursada)','Horário conveniente: Seg/Qua manhã'],cons:['Professor diferente do Redes I — didática pode variar'],motivo:'Progressão natural após Redes I. Alinha com habilidades de infraestrutura do seu currículo.'},
-  {id:9,score:79,pros:['Área em expansão acelerada','Complementa IA e Estrutura de Dados'],cons:['Requer conhecimento sólido de estatística','Conteúdo denso'],motivo:'Machine Learning está altamente alinhado com seu perfil analítico.'},
-  {id:6,score:76,pros:['Disciplina muito bem avaliada','Fortalece base matemática para IA'],cons:['Cálculo I com nota abaixo de 7 pode ser desafio','Conteúdo denso e abstrato'],motivo:'Teoria dos Grafos tem relevância para Algoritmos e IA, porém exige base matemática sólida.'},
-  {id:10,score:72,pros:['Disciplina obrigatória — melhor fazer logo','Professora bem avaliada'],cons:['Você deixou para tarde — pode atrasar o fluxo do currículo'],motivo:'BD II é obrigatória e sua ausência está atrasando seu progresso no currículo.'},
-  {id:1,score:68,pros:['Pré-requisitos atendidos'],cons:['Você já tem SO — a II repete alguns conceitos','Horário menos favorável'],motivo:'SO II é válida mas existem opções mais estratégicas disponíveis.'},
-  {id:5,score:60,pros:['Disciplina prática e criativa'],cons:['Sem disciplinas base correlatas no histórico'],motivo:'Computação Gráfica está menos alinhada com o perfil predominante do seu histórico.'},
-  {id:8,score:55,pros:['Alta empregabilidade'],cons:['Sem pré-requisito formal de front-end'],motivo:'Dev Web é útil mas você tem perfil mais voltado a sistemas.'},
-  {id:4,score:48,pros:['Aprofunda teoria de linguagens formais'],cons:['Histórico sem disciplinas correlatas','Muito teórico'],motivo:'Compiladores é avançado e requer base em Linguagens Formais não evidenciada no histórico.'},
-];
+// Estado
+let selecionadas=[];      // itens normalizados: {cod, nome, cred, slots, prof, sala, tipo, cor}
+let discPendente=null;    // disciplina em avaliação no modal de busca manual
+let codigosCursados = ['ELC1010','ELC1020','ELC1030']; // popular via upload do histórico quando o endpoint existir
 
-const OBRIG_PEND=[
-  {id:10,urgente:true,sem:2,motivo:'Pré-requisito para BD III e TCC. 2 semestres atrasado no fluxo.'},
-  {id:2,urgente:false,sem:1,motivo:'Necessária para concluir a trilha de Redes do currículo.'},
-  {id:4,urgente:false,sem:1,motivo:'Obrigatória prevista para o 6º semestre. Você está no 7º.'},
-];
+function getCodigosCursados(){
+  return codigosCursados;
+}
 
-let selecionadas=[];
-let discPendente=null;
-let filtroAtivo='todos';
+// ── INTEGRAÇÃO COM /api/recomendar/ ──
+// hx-swap="none" no botão: quem desenha a resposta é este listener, reaproveitando
+// o JS de renderização já existente em vez de fazer swap direto de HTML.
+document.body.addEventListener('htmx:afterRequest', function(evt){
+  if(evt.detail.pathInfo.requestPath !== '/api/recomendar/') return;
+
+  if(!evt.detail.successful){
+    let msg='Erro ao buscar recomendações';
+    try{
+      const err=JSON.parse(evt.detail.xhr.response);
+      msg=err.erro||msg;
+    }catch(e){}
+    mostrarToast('⚠️ '+msg);
+    return;
+  }
+
+  let data;
+  try{
+    data=JSON.parse(evt.detail.xhr.response);
+  }catch(e){
+    mostrarToast('⚠️ Resposta inválida do servidor');
+    return;
+  }
+
+  mostrarClusters(data.clusters||[]);
+});
+
+// htmx dispara esse evento em qualquer falha de rede/timeout (antes mesmo de haver resposta)
+document.body.addEventListener('htmx:sendError', function(evt){
+  if(evt.detail.pathInfo.requestPath !== '/api/recomendar/') return;
+  mostrarToast('⚠️ Não foi possível conectar ao servidor');
+});
+
+function mostrarClusters(clusters){
+  document.getElementById('rankingCard').style.display='block';
+  const list=document.getElementById('rankingList');
+  document.getElementById('rankingInfo').textContent=clusters.length+' grupo'+(clusters.length===1?'':'s');
+
+  if(!clusters.length){
+    list.innerHTML='<div class="empty"><div class="empty-i">🔍</div><div class="empty-t">Nenhuma recomendação encontrada</div><div class="empty-s">Tente atualizar seu histórico</div></div>';
+    setTimeout(()=>document.getElementById('rankingCard').scrollIntoView({behavior:'smooth',block:'start'}),80);
+    return;
+  }
+
+  list.innerHTML=clusters.map(c=>`
+    <div class="cluster-grupo">
+      <div class="cluster-label">Grupo ${c.cluster_id+1} · ${c.total_encontrados} relacionadas</div>
+      ${c.disciplinas.map(d=>{
+        const jaSel=!!selecionadas.find(s=>s.cod===d.codigo);
+        return `<div class="ri">
+          <div class="rinfo">
+            <div class="rnome">${d.nome}</div>
+            <div class="rcod">${d.codigo}</div>
+          </div>
+          ${jaSel
+            ? `<span class="bja">✓</span>`
+            : `<button class="badd" onclick="adicionarPorCodigo(${JSON.stringify(d.codigo)}, ${JSON.stringify(d.nome)})">＋</button>`}
+        </div>`;
+      }).join('')}
+    </div>`).join('');
+
+  setTimeout(()=>document.getElementById('rankingCard').scrollIntoView({behavior:'smooth',block:'start'}),80);
+}
+
+function adicionarPorCodigo(codigo,nome){
+  if(selecionadas.find(s=>s.cod===codigo))return;
+  // Sem dados de turma ainda — entra na lista de selecionadas mas não aparece na grade.
+  selecionadas.push({cod:codigo,nome,cred:null,slots:[],prof:null,sala:null,tipo:null,cor:null});
+  renderGrade();renderSelecionadas();
+  // Se o mesmo código estiver visível no card de recomendações, atualiza o botão para "✓"
+  const rankingCard=document.getElementById('rankingCard');
+  if(rankingCard.style.display!=='none'){
+    document.querySelectorAll('#rankingList .ri').forEach(el=>{
+      const rcod=el.querySelector('.rcod');
+      if(rcod && rcod.textContent===codigo){
+        const slot=el.querySelector('.badd, .bja');
+        if(slot) slot.outerHTML='<span class="bja">✓</span>';
+      }
+    });
+  }
+  mostrarToast('✅ '+nome+' adicionada!');
+}
 
 // ── GRADE ──
 function renderGrade(){
   const body=document.getElementById('gradeBody');
   const table=document.getElementById('gradeTable');
   const empty=document.getElementById('gradeEmpty');
+  const comHorario=selecionadas.filter(d=>d.slots && d.slots.length);
   body.innerHTML='';
-  if(!selecionadas.length){table.style.display='none';empty.style.display='block';return;}
+  if(!comHorario.length){table.style.display='none';empty.style.display='block';renderLista();return;}
   table.style.display='table';empty.style.display='none';
   HORARIOS.forEach(h=>{
     const tr=document.createElement('tr');
@@ -453,10 +509,10 @@ function renderGrade(){
     tdH.className='hora-td';tdH.textContent=h;tr.appendChild(tdH);
     DIAS.forEach(d=>{
       const td=document.createElement('td');
-      const disc=selecionadas.find(x=>x.slots.some(s=>s[0]===d&&s[1]===h));
+      const disc=comHorario.find(x=>x.slots.some(s=>s[0]===d&&s[1]===h));
       if(disc){
         const div=document.createElement('div');
-        div.className='aula-c '+disc.cor;
+        div.className='aula-c '+(disc.cor||'av');
         div.textContent=disc.nome.length>17?disc.nome.substring(0,16)+'…':disc.nome;
         td.appendChild(div);
       }
@@ -472,12 +528,12 @@ function renderLista(){
   if(!selecionadas.length){lv.innerHTML='<div class="empty"><div class="empty-i">📋</div><div class="empty-t">Nenhuma disciplina</div></div>';return;}
   lv.innerHTML=selecionadas.map(d=>`
     <div style="display:flex;align-items:center;gap:8px;padding:7px 0;border-bottom:1px solid var(--borda);">
-      <span style="width:22px;height:22px;border-radius:5px;background:var(--verde-palido);color:var(--verde);display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:600;flex-shrink:0;">${d.cred}</span>
+      <span style="width:22px;height:22px;border-radius:5px;background:var(--verde-palido);color:var(--verde);display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:600;flex-shrink:0;">${d.cred??'—'}</span>
       <div style="flex:1;min-width:0;">
         <div style="font-size:12px;font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${d.nome}</div>
-        <div style="font-size:10px;color:var(--texto-sec);">${d.cod} · ${d.prof} · ${d.sala}</div>
+        <div style="font-size:10px;color:var(--texto-sec);">${d.cod}${d.prof?' · '+d.prof:''}${d.sala?' · '+d.sala:''}</div>
       </div>
-      <div style="font-size:10px;color:var(--texto-sec);white-space:nowrap;">${d.slots.map(s=>s[0]+' '+s[1]).join(', ')}</div>
+      <div style="font-size:10px;color:var(--texto-sec);white-space:nowrap;">${d.slots && d.slots.length?d.slots.map(s=>s[0]+' '+s[1]).join(', '):'sem horário'}</div>
     </div>`).join('');
 }
 
@@ -491,36 +547,34 @@ function renderSelecionadas(){
   }
   w.innerHTML=selecionadas.map(d=>`
     <div class="sel-i">
-      <div class="sel-n">${d.nome}<br><span style="font-size:9px;color:var(--texto-sec);">${d.cod} · ${d.cred} cred.</span></div>
-      <div class="sel-x" onclick="removerDisc(${d.id})">✕</div>
+      <div class="sel-n">${d.nome}<br><span style="font-size:9px;color:var(--texto-sec);">${d.cod}${d.cred?' · '+d.cred+' cred.':''}</span></div>
+      <div class="sel-x" onclick="removerDisc('${d.cod}')">✕</div>
     </div>`).join('');
 }
 
-function removerDisc(id){
-  selecionadas=selecionadas.filter(d=>d.id!==id);
+function removerDisc(cod){
+  selecionadas=selecionadas.filter(d=>d.cod!==cod);
   renderGrade();renderSelecionadas();
-  if(document.getElementById('rankingCard').style.display!=='none')renderRanking();
-  mostrarToast('Disciplina removida da grade');
+  mostrarToast('Disciplina removida');
 }
 
-// ── BUSCA ──
+// ── BUSCA MANUAL ──
 function filtrarDisc(q){
   const w=document.getElementById('discResultados');
   if(!q||q.length<2){w.innerHTML='';return;}
-  const res=DISC.filter(d=>!selecionadas.find(s=>s.id===d.id)&&
+  const res=DISC.filter(d=>!selecionadas.find(s=>s.cod===d.cod)&&
     (d.nome.toLowerCase().includes(q.toLowerCase())||d.cod.toLowerCase().includes(q.toLowerCase())));
   if(!res.length){w.innerHTML='<div style="font-size:11px;color:var(--texto-sec);padding:6px;">Nenhuma disciplina encontrada.</div>';return;}
   w.innerHTML=res.map(d=>`
-    <div onclick="abrirModalDisc(${d.id})" style="padding:7px 9px;border-radius:7px;cursor:pointer;margin-bottom:3px;border:1px solid var(--borda);background:white;transition:background 0.15s;"
+    <div onclick="abrirModalDisc('${d.cod}')" style="padding:7px 9px;border-radius:7px;cursor:pointer;margin-bottom:3px;border:1px solid var(--borda);background:white;transition:background 0.15s;"
       onmouseover="this.style.background='var(--fundo)'" onmouseout="this.style.background='white'">
       <div style="font-size:12px;font-weight:500;">${d.nome}</div>
       <div style="font-size:10px;color:var(--texto-sec);">${d.cod} · ${d.cred} cred. · ${d.slots.map(s=>s[0]+' '+s[1]).join(', ')}</div>
     </div>`).join('');
 }
 
-// ── MODAL DISC ──
-function abrirModalDisc(id){
-  const d=DISC.find(x=>x.id===id);discPendente=d;
+function abrirModalDisc(cod){
+  const d=DISC.find(x=>x.cod===cod);discPendente=d;
   document.getElementById('mdTitle').textContent=d.nome;
   document.getElementById('mdSub').textContent=d.cod+' · '+(d.tipo==='obrig'?'Obrigatória':'Optativa')+' · '+d.cred+' créditos';
   const c=verificarConflito(d);
@@ -540,153 +594,14 @@ function abrirModalDisc(id){
 function fecharModalDisc(){document.getElementById('modalDisc').classList.remove('open');discPendente=null;}
 function confirmarAdicionar(){
   if(!discPendente)return;
-  if(!selecionadas.find(d=>d.id===discPendente.id))selecionadas.push(discPendente);
+  if(!selecionadas.find(d=>d.cod===discPendente.cod))selecionadas.push(discPendente);
   fecharModalDisc();
   document.getElementById('searchDisc').value='';
   document.getElementById('discResultados').innerHTML='';
   renderGrade();renderSelecionadas();
-  if(document.getElementById('rankingCard').style.display!=='none')renderRanking();
   mostrarToast('✅ '+discPendente.nome+' adicionada!');
 }
-function verificarConflito(d){return d.slots.some(s=>selecionadas.some(sel=>sel.slots.some(ss=>ss[0]===s[0]&&ss[1]===s[1])));}
-
-// ── OBRIGATORIAS ──
-function renderObrigatorias(){
-  document.getElementById('obrigCard').style.display='block';
-  document.getElementById('obrigBody').innerHTML=OBRIG_PEND.map(o=>{
-    const d=DISC.find(x=>x.id===o.id);
-    const jaSel=!!selecionadas.find(x=>x.id===o.id);
-    return `<div class="oi${o.urgente?' oi-urg':''}">
-      <div style="flex:1;min-width:0;">
-        <div style="font-size:12px;font-weight:600;">${d.nome}</div>
-        <div style="font-size:10px;color:var(--texto-sec);margin-top:2px;">${o.motivo}</div>
-      </div>
-      <span class="obadge ${o.urgente?'obu':'oba'}">${o.urgente?'🚨 '+o.sem+' sem. atrasado':'⏰ '+o.sem+' sem. atrasado'}</span>
-      ${jaSel?`<span class="bja">✓ Adicionada</span>`:`<button class="badd" onclick="adicionarRec(${o.id})">＋ Adicionar</button>`}
-    </div>`;
-  }).join('');
-}
-
-// ── RECOMENDAÇÕES ──
-function mostrarRecomendacoes(){
-  document.getElementById('rankingCard').style.display='block';
-  renderObrigatorias();
-  renderRanking();
-  setTimeout(()=>document.getElementById('rankingCard').scrollIntoView({behavior:'smooth',block:'start'}),80);
-}
-
-function setFiltro(el,f){
-  document.querySelectorAll('.fbtn').forEach(b=>b.classList.remove('on'));
-  el.classList.add('on');filtroAtivo=f;renderRanking();
-}
-
-function filtrarRec(r){
-  const d=DISC.find(x=>x.id===r.id);
-  const dias=d.slots.map(s=>s[0]);
-  const horas=d.slots.map(s=>s[1]);
-  if(filtroAtivo==='todos')return true;
-  if(filtroAtivo==='obrig')return d.tipo==='obrig';
-  if(filtroAtivo==='opta')return d.tipo==='opta';
-  if(filtroAtivo==='seg')return dias.includes('Seg');
-  if(filtroAtivo==='ter')return dias.includes('Ter');
-  if(filtroAtivo==='qua')return dias.includes('Qua');
-  if(filtroAtivo==='qui')return dias.includes('Qui');
-  if(filtroAtivo==='sex')return dias.includes('Sex');
-  if(filtroAtivo==='manha')return horas.some(h=>['07:30','08:30','09:30','10:30','11:30'].includes(h));
-  if(filtroAtivo==='tarde')return horas.some(h=>['13:00','14:00','15:00','16:00','17:00'].includes(h));
-  if(filtroAtivo==='sem_conflito')return!verificarConflito(d);
-  if(filtroAtivo==='infra')return d.area==='infra';
-  if(filtroAtivo==='ia')return d.area==='ia';
-  if(filtroAtivo==='dev')return d.area==='dev';
-  return true;
-}
-
-function renderRanking(){
-  const list=document.getElementById('rankingList');
-  const info=document.getElementById('rankingInfo');
-  const sorted=[...RECS].sort((a,b)=>b.score-a.score).filter(filtrarRec);
-  info.textContent=sorted.length+' disciplinas';
-  if(!sorted.length){
-    list.innerHTML='<div class="empty"><div class="empty-i">🔍</div><div class="empty-t">Nenhuma disciplina neste filtro</div><div class="empty-s">Tente outro filtro ou veja todos</div></div>';
-    return;
-  }
-  list.innerHTML=sorted.map((r,i)=>{
-    const d=DISC.find(x=>x.id===r.id);
-    const pc=i===0?'p1':i===1?'p2':i===2?'p3':'pn';
-    const jaSel=!!selecionadas.find(x=>x.id===r.id);
-    const tb=d.tipo==='obrig'
-      ?`<span style="background:#FEF3C7;color:#78350F;border-radius:3px;padding:1px 5px;font-size:9px;font-weight:600;">OBRIG</span>`
-      :`<span style="background:#EDE0FF;color:#4A1E87;border-radius:3px;padding:1px 5px;font-size:9px;font-weight:600;">OPT</span>`;
-    return `<div class="ri" onclick="abrirFeedback(${r.id})">
-      <div class="rpos ${pc}">${i+1}</div>
-      <div class="rinfo">
-        <div class="rnome">${d.nome} ${tb}</div>
-        <div class="rcod">${d.cod} · ${d.cred} cred. · ${d.slots.map(s=>s[0]+' '+s[1]).join(', ')}</div>
-      </div>
-      <div style="display:flex;flex-direction:column;align-items:flex-end;gap:2px;flex-shrink:0;">
-        <div class="snum">${r.score}</div>
-        <div class="sbg"><div class="sfill" style="width:${r.score}%"></div></div>
-      </div>
-      ${jaSel?`<span class="bja">✓</span>`:`<button class="badd" onclick="event.stopPropagation();adicionarRec(${r.id})">＋</button>`}
-    </div>`;
-  }).join('');
-}
-
-function adicionarRec(id){
-  const d=DISC.find(x=>x.id===id);
-  if(!d||selecionadas.find(x=>x.id===id))return;
-  selecionadas.push(d);
-  renderGrade();renderSelecionadas();
-  if(document.getElementById('rankingCard').style.display!=='none')renderRanking();
-  renderObrigatorias();
-  mostrarToast('✅ '+d.nome+' adicionada!');
-}
-
-// ── FEEDBACK MODAL ──
-function abrirFeedback(id){
-  const rec=RECS.find(r=>r.id===id);
-  const d=DISC.find(x=>x.id===id);
-  const jaSel=!!selecionadas.find(x=>x.id===id);
-  document.getElementById('mfTitle').textContent=d.nome;
-  document.getElementById('mfSub').textContent=d.cod+' · '+d.prof+' · '+d.sala;
-  const pct=rec.score;
-  const cor=pct>=80?'#52B788':pct>=60?'#C9A84C':'#EF4444';
-  document.getElementById('mfBody').innerHTML=`
-    <div style="display:flex;align-items:center;gap:14px;margin-bottom:14px;padding:12px;background:var(--fundo);border-radius:9px;">
-      <div style="position:relative;width:68px;height:68px;flex-shrink:0;">
-        <svg width="68" height="68" viewBox="0 0 68 68">
-          <circle cx="34" cy="34" r="28" fill="none" stroke="#E0DDD5" stroke-width="7"/>
-          <circle cx="34" cy="34" r="28" fill="none" stroke="${cor}" stroke-width="7"
-            stroke-dasharray="${2*Math.PI*28}" stroke-dashoffset="${2*Math.PI*28*(1-pct/100)}"
-            stroke-linecap="round" transform="rotate(-90 34 34)"/>
-        </svg>
-        <div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:17px;font-weight:700;color:${cor};">${pct}</div>
-      </div>
-      <div style="flex:1;">
-        <div style="font-size:10px;color:var(--texto-sec);margin-bottom:3px;">Compatibilidade com seu perfil</div>
-        <div style="font-size:12px;line-height:1.55;color:var(--texto);">${rec.motivo}</div>
-      </div>
-    </div>
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px;">
-      <div style="background:var(--fundo);padding:8px;border-radius:7px;"><div style="font-size:10px;color:var(--texto-sec);margin-bottom:2px;">Tipo</div><div style="font-size:12px;font-weight:500;">${d.tipo==='obrig'?'⚠️ Obrigatória':'🎓 Optativa'}</div></div>
-      <div style="background:var(--fundo);padding:8px;border-radius:7px;"><div style="font-size:10px;color:var(--texto-sec);margin-bottom:2px;">Conflito</div><div style="font-size:12px;font-weight:500;">${verificarConflito(d)?'⚠️ Há conflito':'✅ Sem conflito'}</div></div>
-    </div>
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
-      <div>
-        <div style="font-size:11px;font-weight:600;color:#166534;margin-bottom:5px;">✅ Por que é boa</div>
-        ${rec.pros.map(p=>`<div style="display:flex;gap:6px;padding:6px 7px;background:#DCFCE7;border-radius:5px;margin-bottom:4px;"><span style="font-size:11px;flex-shrink:0;">✅</span><span style="font-size:11px;color:#166534;line-height:1.4;">${p}</span></div>`).join('')}
-      </div>
-      <div>
-        <div style="font-size:11px;font-weight:600;color:#991B1B;margin-bottom:5px;">⚠️ Pontos de atenção</div>
-        ${rec.cons.map(c=>`<div style="display:flex;gap:6px;padding:6px 7px;background:#FEE2E2;border-radius:5px;margin-bottom:4px;"><span style="font-size:11px;flex-shrink:0;">⚠️</span><span style="font-size:11px;color:#991B1B;line-height:1.4;">${c}</span></div>`).join('')}
-      </div>
-    </div>`;
-  document.getElementById('mfFooter').innerHTML=jaSel
-    ?`<div style="font-size:12px;color:#166534;background:#D8F3DC;padding:8px 12px;border-radius:7px;width:100%;text-align:center;">✅ Já está na sua grade</div><button class="btn-s" onclick="fecharModalFeedback()">Fechar</button>`
-    :`<button class="btn-p" style="flex:1;" onclick="adicionarRec(${id});fecharModalFeedback();">✅ Adicionar à Grade</button><button class="btn-s" onclick="fecharModalFeedback()">Fechar</button>`;
-  document.getElementById('modalFeedback').classList.add('open');
-}
-function fecharModalFeedback(){document.getElementById('modalFeedback').classList.remove('open');}
+function verificarConflito(d){return d.slots.some(s=>selecionadas.some(sel=>sel.slots&&sel.slots.some(ss=>ss[0]===s[0]&&ss[1]===s[1])));}
 
 // ── TABS ──
 function setTab(el,tab){
@@ -696,12 +611,13 @@ function setTab(el,tab){
   document.getElementById('listaView').style.display=tab==='lista'?'block':'none';
 }
 
-// ── UPLOAD ──
+// ── UPLOAD (simulado — sem endpoint ainda) ──
 function triggerUpload(){document.getElementById('fileInput').click();}
 function handleUpload(inp){
   if(!inp.files.length)return;
   document.getElementById('uploadStatus').style.display='flex';
-  mostrarToast('📄 Histórico importado com sucesso!');
+  document.getElementById('uploadCount').textContent=codigosCursados.length+' disciplinas';
+  mostrarToast('📄 Histórico importado (simulado) — endpoint de upload ainda não existe');
 }
 
 // ── DOWNLOAD ──
@@ -709,7 +625,7 @@ function downloadGrade(){
   if(!selecionadas.length){mostrarToast('⚠️ Adicione disciplinas antes de baixar');return;}
   const rows=HORARIOS.map(h=>{
     const cells=DIAS.map(d=>{
-      const disc=selecionadas.find(x=>x.slots.some(s=>s[0]===d&&s[1]===h));
+      const disc=selecionadas.find(x=>x.slots&&x.slots.some(s=>s[0]===d&&s[1]===h));
       return`<td style="padding:8px;border:1px solid #ddd;text-align:center;font-size:11px;background:${disc?'#D8F3DC':'white'}">${disc?disc.nome:''}</td>`;
     }).join('');
     return`<tr><td style="padding:8px;border:1px solid #ddd;font-weight:600;background:#f5f5f5;font-size:11px;">${h}</td>${cells}</tr>`;
@@ -728,7 +644,7 @@ function mostrarToast(msg){
   setTimeout(()=>t.classList.remove('show'),2800);
 }
 
-document.addEventListener('keydown',e=>{if(e.key==='Escape'){fecharModalDisc();fecharModalFeedback();}});
+document.addEventListener('keydown',e=>{if(e.key==='Escape'){fecharModalDisc();}});
 renderGrade();renderSelecionadas();
 </script>
 </body>

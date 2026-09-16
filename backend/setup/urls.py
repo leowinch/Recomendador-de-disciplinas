@@ -2,6 +2,7 @@ from django.contrib import admin
 from django.urls import path, include
 from django.apps import apps
 from rest_framework import serializers, viewsets, routers
+from django.views.generic import TemplateView
 
 from core.views import RecomendacaoView
 
@@ -26,6 +27,7 @@ for model in app_models:
     router.register(model._meta.model_name, viewset_cls, basename=model._meta.model_name)
 
 urlpatterns = [
+    path('', TemplateView.as_view(template_name='prototipo.html'), name='home'),
     path('admin/', admin.site.urls),
     path('api/', include(router.urls)),
     path('api/recomendar/', RecomendacaoView.as_view(), name='recomendar'),

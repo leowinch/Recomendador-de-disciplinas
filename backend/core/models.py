@@ -19,25 +19,25 @@ class Aluno(models.Model):
 
 
 class CargaHistorico(models.Model):
-    cod_curso = models.IntegerField(db_column='COD_CURSO', blank=True, null=True)  # Field name made lowercase.
-    nome_curso = models.TextField(db_column='NOME_CURSO', blank=True, null=True)  # Field name made lowercase.
-    tipo_atividade = models.TextField(db_column='TIPO_ATIVIDADE', blank=True, null=True)  # Field name made lowercase.
-    depto = models.TextField(db_column='DEPTO', blank=True, null=True)  # Field name made lowercase.
-    ch_minima = models.DecimalField(db_column='CH_MINIMA', blank=True, null=True)  # Field name made lowercase.
-    num_versao = models.IntegerField(db_column='NUM_VERSAO', blank=True, null=True)  # Field name made lowercase.
-    cod_ativ_curric = models.TextField(db_column='COD_ATIV_CURRIC', blank=True, null=True)  # Field name made lowercase.
-    nome_ativ_curric = models.TextField(db_column='NOME_ATIV_CURRIC', blank=True, null=True)  # Field name made lowercase.
-    ch_total = models.DecimalField(db_column='CH_TOTAL', blank=True, null=True)  # Field name made lowercase.
-    creditos = models.DecimalField(db_column='CREDITOS', blank=True, null=True)  # Field name made lowercase.
-    ano = models.IntegerField(db_column='ANO', blank=True, null=True)  # Field name made lowercase.
-    periodo = models.TextField(db_column='PERIODO', blank=True, null=True)  # Field name made lowercase.
-    media_final = models.DecimalField(db_column='MEDIA_FINAL', blank=True, null=True)  # Field name made lowercase.
-    situacao = models.TextField(db_column='SITUACAO', blank=True, null=True)  # Field name made lowercase.
-    cod_aluno = models.TextField(db_column='COD_ALUNO', blank=True, null=True)  # Field name made lowercase.
-    forma_evasao = models.TextField(db_column='FORMA_EVASAO', blank=True, null=True)  # Field name made lowercase.
-    semestre_aluno = models.TextField(db_column='SEMESTRE_ALUNO', blank=True, null=True)  # Field name made lowercase.
-    semestre_rel_aluno = models.IntegerField(db_column='SEMESTRE_REL_ALUNO', blank=True, null=True)  # Field name made lowercase.
-    semestre_rel_ativ = models.IntegerField(db_column='SEMESTRE_REL_ATIV', blank=True, null=True)  # Field name made lowercase.
+    cod_curso = models.IntegerField(db_column='COD_CURSO', blank=True, null=True)
+    nome_curso = models.TextField(db_column='NOME_CURSO', blank=True, null=True)
+    tipo_atividade = models.TextField(db_column='TIPO_ATIVIDADE', blank=True, null=True)
+    depto = models.TextField(db_column='DEPTO', blank=True, null=True)
+    ch_minima = models.DecimalField(db_column='CH_MINIMA', max_digits=7, decimal_places=2, blank=True, null=True)
+    num_versao = models.IntegerField(db_column='NUM_VERSAO', blank=True, null=True)
+    cod_ativ_curric = models.TextField(db_column='COD_ATIV_CURRIC', blank=True, null=True)
+    nome_ativ_curric = models.TextField(db_column='NOME_ATIV_CURRIC', blank=True, null=True)
+    ch_total = models.DecimalField(db_column='CH_TOTAL', max_digits=7, decimal_places=2, blank=True, null=True)
+    creditos = models.DecimalField(db_column='CREDITOS', max_digits=5, decimal_places=2, blank=True, null=True)
+    ano = models.IntegerField(db_column='ANO', blank=True, null=True)
+    periodo = models.TextField(db_column='PERIODO', blank=True, null=True)
+    media_final = models.DecimalField(db_column='MEDIA_FINAL', max_digits=4, decimal_places=2, blank=True, null=True)
+    situacao = models.TextField(db_column='SITUACAO', blank=True, null=True)
+    cod_aluno = models.TextField(db_column='COD_ALUNO', blank=True, null=True)
+    forma_evasao = models.TextField(db_column='FORMA_EVASAO', blank=True, null=True)
+    semestre_aluno = models.TextField(db_column='SEMESTRE_ALUNO', blank=True, null=True)
+    semestre_rel_aluno = models.IntegerField(db_column='SEMESTRE_REL_ALUNO', blank=True, null=True)
+    semestre_rel_ativ = models.IntegerField(db_column='SEMESTRE_REL_ATIV', blank=True, null=True)
 
     class Meta:
         managed = False
@@ -101,7 +101,7 @@ class Historico(models.Model):
     ano = models.IntegerField(blank=True, null=True)
     periodo = models.TextField(blank=True, null=True)
     situacao = models.TextField(blank=True, null=True)
-    media_final = models.DecimalField(blank=True, null=True)
+    media_final = models.DecimalField(max_digits=4, decimal_places=2, blank=True, null=True)
 
     class Meta:
         managed = False
