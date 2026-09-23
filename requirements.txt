@@ -1,6 +1,7 @@
 Django==5.2.17
 djangorestframework==3.18.0
 psycopg2-binary==2.9.12
+pypdf==6.19.0
 python-dotenv==1.2.3
 numpy==2.5.3
 pandas==3.0.5

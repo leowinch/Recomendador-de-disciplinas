@@ -2,7 +2,13 @@ from django.shortcuts import render
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status
+from rest_framework.parsers import MultiPartParser
+from pypdf.errors import PdfReadError
 from .services import gerar_recomendacoes_agrupadas
+from .historico import resumir_historico
+from .catalogo import buscar_disciplinas, detalhar_disciplina
+
+TAMANHO_MAX_HISTORICO = 5 * 1024 * 1024  # 5 MB
 
 class RecomendacaoView(APIView):
     """
@@ -35,3 +41,71 @@ class RecomendacaoView(APIView):
                 {"erro": f"Erro interno no servidor: {str(e)}"},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
+
+
+class HistoricoView(APIView):
+    """
+    Recebe o PDF do histórico escolar (campo 'arquivo', multipart) e devolve
+    os códigos extraídos. O arquivo é lido em memória e não é salvo.
+    """
+    parser_classes = [MultiPartParser]
+
+    def post(self, request):
+        arquivo = request.FILES.get('arquivo')
+
+        if not arquivo:
+            return Response(
+                {"erro": "Envie o PDF do histórico no campo 'arquivo'."},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        if arquivo.size > TAMANHO_MAX_HISTORICO:
+            return Response(
+                {"erro": "Arquivo maior que 5 MB."},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        if arquivo.read(5) != b'%PDF-':
+            return Response(
+                {"erro": "O arquivo enviado não é um PDF."},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        arquivo.seek(0)
+
+        try:
+            resultado = resumir_historico(arquivo)
+        except PdfReadError:
+            return Response(
+                {"erro": "Não foi possível ler o PDF."},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        if not resultado['disciplinas']:
+            return Response(
+                {"erro": "Nenhuma disciplina encontrada. O PDF é o histórico do Portal do Aluno UFSM?"},
+                status=status.HTTP_422_UNPROCESSABLE_ENTITY
+            )
+
+        return Response({"sucesso": True, **resultado}, status=status.HTTP_200_OK)
+
+
+class BuscaDisciplinaView(APIView):
+    """GET ?q=termo — busca disciplinas por código ou nome, já com as turmas e horários."""
+    def get(self, request):
+        q = request.query_params.get('q', '').strip()
+        if len(q) < 2:
+            return Response(
+                {"erro": "Digite ao menos 2 caracteres."},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        return Response({"disciplinas": buscar_disciplinas(q)}, status=status.HTTP_200_OK)
+
+
+class DetalheDisciplinaView(APIView):
+    """Dados de uma disciplina para o modal: turmas/horários, ementa, objetivo e cursos."""
+    def get(self, request, codigo):
+        disciplina = detalhar_disciplina(codigo)
+        if not disciplina:
+            return Response(
+                {"erro": f"Disciplina {codigo} não encontrada."},
+                status=status.HTTP_404_NOT_FOUND
+            )
+        return Response(disciplina, status=status.HTTP_200_OK)

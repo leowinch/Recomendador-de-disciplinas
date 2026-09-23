@@ -4,7 +4,7 @@ from django.apps import apps
 from rest_framework import serializers, viewsets, routers
 from django.views.generic import TemplateView
 
-from core.views import RecomendacaoView
+from core.views import RecomendacaoView, HistoricoView, BuscaDisciplinaView, DetalheDisciplinaView
 
 router = routers.DefaultRouter()
 
@@ -31,4 +31,7 @@ urlpatterns = [
     path('admin/', admin.site.urls),
     path('api/', include(router.urls)),
     path('api/recomendar/', RecomendacaoView.as_view(), name='recomendar'),
+    path('api/importar-historico/', HistoricoView.as_view(), name='importar-historico'),
+    path('api/buscar-disciplinas/', BuscaDisciplinaView.as_view(), name='buscar-disciplinas'),
+    path('api/detalhe-disciplina/<str:codigo>/', DetalheDisciplinaView.as_view(), name='detalhe-disciplina'),
 ]
