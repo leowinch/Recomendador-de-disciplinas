@@ -135,12 +135,14 @@ body{font-family:'DM Sans',sans-serif;background:var(--fundo);color:var(--texto)
   cursor:pointer;flex-shrink:0;transition:all 0.15s;font-family:'DM Sans',sans-serif;
 }
 .badd:hover{background:var(--verde);color:white;}
+.rtag{font-size:9px;font-weight:600;color:#991B1B;background:#FEE2E2;border-radius:20px;padding:2px 7px;flex-shrink:0;}
+.rec-dica{font-size:11px;color:#78350F;margin-bottom:10px;padding:8px 10px;background:#FFF8E6;border-radius:7px;border-left:3px solid var(--ouro);}
 .bja{background:#D8F3DC;color:#1B4332;border:1px solid #B7E4C7;border-radius:5px;padding:3px 7px;font-size:10px;font-weight:500;flex-shrink:0;}
 
 /* TABS */
 .tab-bar{display:flex;gap:2px;background:var(--fundo);border-radius:7px;padding:2px;}
 .tab{
-  flex:1;text-align:center;padding:5px 7px;border-radius:5px;
+  flex:1;text-align:center;padding:5px 7px;border-radius:5px;white-space:nowrap;
   font-size:11px;font-weight:500;cursor:pointer;color:var(--texto-sec);
   transition:all 0.2s;border:none;background:none;font-family:'DM Sans',sans-serif;
 }
@@ -282,7 +284,7 @@ body{font-family:'DM Sans',sans-serif;background:var(--fundo);color:var(--texto)
       <div id="discResultados" style="max-height:150px;overflow-y:auto;margin-top:5px;"></div>
     </div>
 
-    <!-- RECOMENDAR — integrado via htmx ao POST /api/recomendar/ -->
+    <!-- RECOMENDAR — htmx faz o POST /api/recomendar/ (DCGs); o mesmo clique busca as obrigatórias -->
     <div class="ss">
       <button class="btn-p"
               id="btnRecomendar"
@@ -297,7 +299,7 @@ body{font-family:'DM Sans',sans-serif;background:var(--fundo);color:var(--texto)
       <p id="recLoading" class="htmx-indicator" style="font-size:10px;color:var(--texto-sec);text-align:center;margin-top:5px;">
         Analisando histórico…
       </p>
-      <p style="font-size:10px;color:var(--texto-sec);text-align:center;margin-top:5px;line-height:1.5;">O sistema analisa seu histórico e sugere as melhores disciplinas</p>
+      <p style="font-size:10px;color:var(--texto-sec);text-align:center;margin-top:5px;line-height:1.5;">O sistema mostra as obrigatórias pendentes e sugere complementares pelo seu histórico</p>
     </div>
 
     <!-- SELECIONADAS -->
@@ -344,19 +346,25 @@ body{font-family:'DM Sans',sans-serif;background:var(--fundo);color:var(--texto)
     </div>
 
     <!--
-      OBRIGATÓRIAS PENDENTES — desligado por enquanto.
-      Precisa de uma URL tipo GET /api/obrigatorias-pendentes/ que compare o
-      currículo do curso com o histórico do aluno. Reativar quando existir.
+      RESULTADO DA RECOMENDAÇÃO, em duas abas: obrigatórias pendentes
+      (/api/obrigatorias-pendentes/) e clusters baseados nas DCGs (/api/recomendar/)
     -->
-
-    <!-- RESULTADO DA RECOMENDAÇÃO (clusters vindos de /api/recomendar/) -->
     <div class="card" id="rankingCard" style="display:none;">
       <div class="card-h">
         <div class="card-t">🏆 Disciplinas Recomendadas</div>
-        <span style="font-size:10px;color:var(--texto-sec);background:var(--fundo);padding:3px 9px;border-radius:20px;border:1px solid var(--borda);" id="rankingInfo">—</span>
+        <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;">
+          <div class="tab-bar">
+            <button class="tab on" id="abaObrig" onclick="setAbaRec('obrig')">Obrigatórias</button>
+            <button class="tab" id="abaDcg" onclick="setAbaRec('dcg')">Baseadas nas DCGs</button>
+          </div>
+          <span style="font-size:10px;color:var(--texto-sec);background:var(--fundo);padding:3px 9px;border-radius:20px;border:1px solid var(--borda);" id="rankingInfo">—</span>
+        </div>
       </div>
-      <div class="card-b">
-        <div style="font-size:11px;color:#78350F;margin-bottom:10px;padding:8px 10px;background:#FFF8E6;border-radius:7px;border-left:3px solid var(--ouro);">
+      <div class="card-b" id="obrigView">
+        <div id="obrigList"></div>
+      </div>
+      <div class="card-b" id="dcgView" style="display:none;">
+        <div class="rec-dica">
           💡 Disciplinas agrupadas por similaridade com o que você já cursou.
         </div>
         <!--
@@ -401,6 +409,10 @@ let discPendente=null;    // detalhe da disciplina aberta no modal
 let turmaPendente=null;   // turma marcada no modal
 let modalSeq=0;           // descarta detalhe que chegue depois de o modal ter trocado de disciplina
 let codigosCursados = []; // DCGs concluídas, preenchidas pelo upload do histórico
+let historico=null;       // resposta do /api/importar-historico/ (curso, ingresso, disciplinas)
+let abaRec='obrig';       // aba aberta no card de recomendações
+const infoRec={obrig:'—',dcg:'—'}; // contador de cada aba, mostrado ao lado delas
+let obrigSeq=0;           // descarta resposta de obrigatórias de um clique anterior
 const cacheDetalhes=new Map(); // codigo → resposta de /api/detalhe-disciplina/
 
 function esc(s){return String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
@@ -444,12 +456,19 @@ document.body.addEventListener('htmx:afterRequest', function(evt){
   mostrarClusters(data.clusters||[]);
 });
 
-// Sem histórico não há o que enviar: barra a requisição antes de sair
+// Sem histórico não há o que enviar: barra a requisição antes de sair. Com histórico,
+// as obrigatórias são buscadas sempre; o POST das DCGs só sai se houver alguma concluída.
 document.body.addEventListener('htmx:beforeRequest', function(evt){
   if(evt.detail.pathInfo.requestPath !== '/api/recomendar/') return;
+  if(!historico){
+    evt.preventDefault();
+    mostrarToast('⚠️ Envie o histórico escolar primeiro');
+    return;
+  }
+  carregarObrigatorias();
   if(!codigosCursados.length){
     evt.preventDefault();
-    mostrarToast('⚠️ Envie o histórico com ao menos uma complementar concluída');
+    mostrarClusters([]);
   }
 });
 
@@ -459,38 +478,131 @@ document.body.addEventListener('htmx:sendError', function(evt){
   mostrarToast('⚠️ Não foi possível conectar ao servidor');
 });
 
+function abrirRankingCard(){
+  const card=document.getElementById('rankingCard');
+  if(card.style.display==='block')return;
+  card.style.display='block';
+  setTimeout(()=>card.scrollIntoView({behavior:'smooth',block:'start'}),80);
+}
+
+function setAbaRec(aba){
+  abaRec=aba;
+  document.getElementById('abaObrig').classList.toggle('on',aba==='obrig');
+  document.getElementById('abaDcg').classList.toggle('on',aba==='dcg');
+  document.getElementById('obrigView').style.display=aba==='obrig'?'block':'none';
+  document.getElementById('dcgView').style.display=aba==='dcg'?'block':'none';
+  document.getElementById('rankingInfo').textContent=infoRec[aba];
+}
+
+function setInfoRec(aba,texto){
+  infoRec[aba]=texto;
+  if(aba===abaRec)document.getElementById('rankingInfo').textContent=texto;
+}
+
+// Item de recomendação: clicar abre os detalhes; o botão da direita adiciona direto
+function itemRec(d,sub,tag){
+  return `
+    <div class="ri clicavel" data-cod="${esc(d.codigo)}" onclick="abrirModalDisc(this.dataset.cod)">
+      <div class="rinfo">
+        <div class="rnome">${esc(d.nome)}</div>
+        <div class="rcod">${esc(sub)}</div>
+      </div>
+      ${tag?`<span class="rtag">${esc(tag)}</span>`:''}
+      <span class="ri-acao"></span>
+    </div>`;
+}
+
 function mostrarClusters(clusters){
-  document.getElementById('rankingCard').style.display='block';
+  abrirRankingCard();
   const list=document.getElementById('rankingList');
-  document.getElementById('rankingInfo').textContent=clusters.length+' grupo'+(clusters.length===1?'':'s');
+  setInfoRec('dcg',clusters.length+' grupo'+(clusters.length===1?'':'s'));
 
   if(!clusters.length){
-    list.innerHTML='<div class="empty"><div class="empty-i">🔍</div><div class="empty-t">Nenhuma recomendação encontrada</div><div class="empty-s">Tente atualizar seu histórico</div></div>';
-    setTimeout(()=>document.getElementById('rankingCard').scrollIntoView({behavior:'smooth',block:'start'}),80);
+    list.innerHTML=codigosCursados.length
+      ? '<div class="empty"><div class="empty-i">🔍</div><div class="empty-t">Nenhuma recomendação encontrada</div><div class="empty-s">Tente atualizar seu histórico</div></div>'
+      : '<div class="empty"><div class="empty-i">🔍</div><div class="empty-t">Nenhuma complementar concluída no histórico</div><div class="empty-s">Essas recomendações partem das DCGs que você já cursou</div></div>';
     return;
   }
 
-  // Clicar no item abre os detalhes; o botão da direita adiciona direto
   list.innerHTML=clusters.map(c=>`
     <div class="cluster-grupo">
       <div class="cluster-label">Grupo ${c.cluster_id+1} · ${c.total_encontrados} relacionadas</div>
-      ${c.disciplinas.map(d=>`
-        <div class="ri clicavel" data-cod="${esc(d.codigo)}" onclick="abrirModalDisc(this.dataset.cod)">
-          <div class="rinfo">
-            <div class="rnome">${esc(d.nome)}</div>
-            <div class="rcod">${esc(d.codigo)}</div>
-          </div>
-          <span class="ri-acao"></span>
-        </div>`).join('')}
+      ${c.disciplinas.map(d=>itemRec(d,d.codigo)).join('')}
     </div>`).join('');
   atualizarRanking();
+}
 
-  setTimeout(()=>document.getElementById('rankingCard').scrollIntoView({behavior:'smooth',block:'start'}),80);
+// ── OBRIGATÓRIAS → POST /api/obrigatorias-pendentes/ ──
+async function carregarObrigatorias(){
+  const seq=++obrigSeq;
+  abrirRankingCard();
+  const list=document.getElementById('obrigList');
+  const vazio=(icone,titulo,sub)=>`<div class="empty"><div class="empty-i">${icone}</div><div class="empty-t">${esc(titulo)}</div><div class="empty-s">${esc(sub)}</div></div>`;
+  const falha=(titulo,sub)=>{setInfoRec('obrig','—');list.innerHTML=vazio('⚠️',titulo,sub);};
+
+  if(!historico.curso||!historico.ingresso){
+    falha('Não foi possível ler o cabeçalho do histórico','Curso ou período de ingresso não encontrado no PDF');
+    return;
+  }
+  setInfoRec('obrig','…');
+  list.innerHTML=vazio('⏳','Buscando obrigatórias…','');
+
+  let data;
+  try{
+    const resp=await fetch('/api/obrigatorias-pendentes/',{
+      method:'POST',
+      headers:{'Content-Type':'application/json','X-CSRFToken':'{{ csrf_token }}'},
+      body:JSON.stringify({
+        curso:historico.curso.nome,
+        ingresso:historico.ingresso,
+        disciplinas:historico.disciplinas,
+      }),
+    });
+    data=await resp.json();
+    if(seq!==obrigSeq)return;
+    if(!resp.ok){falha(data.erro||'Erro ao buscar obrigatórias','');return;}
+  }catch(e){
+    if(seq===obrigSeq)falha('Não foi possível conectar ao servidor','');
+    return;
+  }
+  mostrarObrigatorias(data);
+}
+
+function mostrarObrigatorias(data){
+  const list=document.getElementById('obrigList');
+  const total=data.atrasadas.length+data.do_semestre.length;
+  setInfoRec('obrig',total+' disciplina'+(total===1?'':'s'));
+
+  const ing=historico.ingresso, letivo=data.semestre_letivo;
+  const item=d=>itemRec(d,d.codigo+(d.carga_horaria?' · '+d.carga_horaria+'h':''),d.motivo==='reprovada'?'Reprovada':'');
+  const grupo=(titulo,ds)=>`
+    <div class="cluster-grupo">
+      <div class="cluster-label">${esc(titulo)}</div>
+      ${ds.map(item).join('')}
+    </div>`;
+  const semItens=t=>`<div style="font-size:11px;color:var(--texto-sec);padding:2px 0 12px;">${t}</div>`;
+
+  // Atrasadas agrupadas pelo semestre do currículo a que pertencem (já vêm ordenadas)
+  const porPeriodo=new Map();
+  data.atrasadas.forEach(d=>{
+    if(!porPeriodo.has(d.periodo))porPeriodo.set(d.periodo,[]);
+    porPeriodo.get(d.periodo).push(d);
+  });
+
+  list.innerHTML=`
+    <div class="rec-dica">
+      💡 Ingresso em ${ing.ano}/${ing.semestre}: em ${letivo.ano}/${letivo.semestre} você está no ${data.semestre_aluno}º semestre de ${esc(data.curso)}.
+    </div>
+    <div class="md-label" style="font-weight:600;">Do seu semestre (${data.semestre_aluno}º)</div>
+    ${data.do_semestre.length?`<div class="cluster-grupo">${data.do_semestre.map(item).join('')}</div>`:semItens('Nenhuma obrigatória pendente neste semestre.')}
+    <div class="md-label" style="font-weight:600;">Atrasadas</div>
+    ${porPeriodo.size?[...porPeriodo].map(([p,ds])=>grupo(p+'º semestre',ds)).join(''):semItens('Nenhuma obrigatória de semestres anteriores pendente. 🎉')}`;
+  atualizarRanking();
 }
 
 // "＋" ou "✓" em cada recomendação, conforme a disciplina já está na grade
 function atualizarRanking(){
-  document.querySelectorAll('#rankingList .ri').forEach(el=>{
+  document.querySelectorAll('#rankingCard .ri').forEach(el=>{
     el.querySelector('.ri-acao').innerHTML=selecionadas.some(s=>s.cod===el.dataset.cod)
       ? '<span class="bja">✓</span>'
       : '<button class="badd" onclick="event.stopPropagation();adicionarRapido(this.closest(\'.ri\').dataset.cod,this)">＋</button>';
@@ -728,7 +840,7 @@ function confirmarAdicionar(){
 
 // ── TABS ──
 function setTab(el,tab){
-  document.querySelectorAll('.tab-bar .tab').forEach(t=>t.classList.remove('on'));
+  el.parentElement.querySelectorAll('.tab').forEach(t=>t.classList.remove('on'));
   el.classList.add('on');
   document.getElementById('gradeView').style.display=tab==='grade'?'block':'none';
   document.getElementById('listaView').style.display=tab==='lista'?'block':'none';
@@ -757,6 +869,7 @@ async function handleUpload(inp){
     return;
   }
 
+  historico=data;
   codigosCursados=data.complementares;
   renderCursadas();
   document.getElementById('uploadStatus').style.display='flex';

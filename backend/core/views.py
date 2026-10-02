@@ -1,4 +1,5 @@
 from django.shortcuts import render
+from django.utils import timezone
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status
@@ -7,6 +8,7 @@ from pypdf.errors import PdfReadError
 from .services import gerar_recomendacoes_agrupadas
 from .historico import resumir_historico
 from .catalogo import buscar_disciplinas, detalhar_disciplina
+from .obrigatorias import recomendar_obrigatorias
 
 TAMANHO_MAX_HISTORICO = 5 * 1024 * 1024  # 5 MB
 
@@ -84,6 +86,46 @@ class HistoricoView(APIView):
                 status=status.HTTP_422_UNPROCESSABLE_ENTITY
             )
 
+        return Response({"sucesso": True, **resultado}, status=status.HTTP_200_OK)
+
+
+class ObrigatoriasPendentesView(APIView):
+    """
+    Recebe 'curso', 'ingresso' e 'disciplinas' como devolvidos pelo
+    /api/importar-historico/ e devolve as obrigatórias atrasadas e as do
+    semestre em que o aluno está.
+    """
+    def post(self, request):
+        curso = request.data.get('curso')
+        ingresso = request.data.get('ingresso')
+        disciplinas = request.data.get('disciplinas', [])
+
+        if not curso or not isinstance(curso, str):
+            return Response(
+                {"erro": "Envie o nome do curso no campo 'curso'."},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        if (
+            not isinstance(ingresso, dict)
+            or type(ingresso.get('ano')) is not int
+            or ingresso.get('semestre') not in (1, 2)
+        ):
+            return Response(
+                {"erro": "Envie o período de ingresso no campo 'ingresso' ({ano, semestre})."},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        if not isinstance(disciplinas, list) or not all(isinstance(d, dict) for d in disciplinas):
+            return Response(
+                {"erro": "Envie as disciplinas do histórico no campo 'disciplinas'."},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        resultado = recomendar_obrigatorias(curso, ingresso, disciplinas, timezone.localdate())
+        if resultado is None:
+            return Response(
+                {"erro": f"Currículo do curso {curso} não encontrado."},
+                status=status.HTTP_404_NOT_FOUND
+            )
         return Response({"sucesso": True, **resultado}, status=status.HTTP_200_OK)
 
 
