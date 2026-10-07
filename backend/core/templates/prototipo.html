@@ -241,7 +241,7 @@ body{font-family:'DM Sans',sans-serif;background:var(--fundo);color:var(--texto)
 <!-- TÍTULO -->
 <div class="page-title-bar">
   <div class="page-title">Recomendação de Disciplinas — UFSM</div>
-  <div class="page-sub">Sistemas de Informação · Semestre 2024/2 · João Pedro Melo</div>
+  <div class="page-sub"></div>
 </div>
 
 <!-- LAYOUT -->
@@ -322,7 +322,7 @@ body{font-family:'DM Sans',sans-serif;background:var(--fundo);color:var(--texto)
     <!-- GRADE: só entram disciplinas cuja turma escolhida tem horário cadastrado -->
     <div class="card">
       <div class="card-h">
-        <div class="card-t">📅 Grade Horária — 2024/2</div>
+        <div class="card-t" id="gradeCardTitle">📅 Grade Horária</div>
         <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;">
           <div class="tab-bar">
             <button class="tab on" onclick="setTab(this,'grade')">Grade</button>
@@ -414,6 +414,12 @@ let abaRec='obrig';       // aba aberta no card de recomendações
 const infoRec={obrig:'—',dcg:'—'}; // contador de cada aba, mostrado ao lado delas
 let obrigSeq=0;           // descarta resposta de obrigatórias de um clique anterior
 const cacheDetalhes=new Map(); // codigo → resposta de /api/detalhe-disciplina/
+
+// Ano/semestre letivo de hoje: janeiro a junho é o 1º, julho a dezembro o 2º (mesma regra do backend)
+function periodoAtual(){
+  const hoje=new Date();
+  return hoje.getFullYear()+'/'+(hoje.getMonth()<6?1:2);
+}
 
 function esc(s){return String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
 function minutos(h){const [hh,mm]=h.split(':');return Number(hh)*60+Number(mm);}
@@ -573,7 +579,6 @@ function mostrarObrigatorias(data){
   const total=data.atrasadas.length+data.do_semestre.length;
   setInfoRec('obrig',total+' disciplina'+(total===1?'':'s'));
 
-  const ing=historico.ingresso, letivo=data.semestre_letivo;
   const item=d=>itemRec(d,d.codigo+(d.carga_horaria?' · '+d.carga_horaria+'h':''),d.motivo==='reprovada'?'Reprovada':'');
   const grupo=(titulo,ds)=>`
     <div class="cluster-grupo">
@@ -590,9 +595,6 @@ function mostrarObrigatorias(data){
   });
 
   list.innerHTML=`
-    <div class="rec-dica">
-      💡 Ingresso em ${ing.ano}/${ing.semestre}: em ${letivo.ano}/${letivo.semestre} você está no ${data.semestre_aluno}º semestre de ${esc(data.curso)}.
-    </div>
     <div class="md-label" style="font-weight:600;">Do seu semestre (${data.semestre_aluno}º)</div>
     ${data.do_semestre.length?`<div class="cluster-grupo">${data.do_semestre.map(item).join('')}</div>`:semItens('Nenhuma obrigatória pendente neste semestre.')}
     <div class="md-label" style="font-weight:600;">Atrasadas</div>
@@ -905,10 +907,11 @@ function downloadGrade(){
     }</tr>`).join('')
   }</tbody></table>`:'<p>Nenhuma disciplina com horário cadastrado.</p>';
   const lista=selecionadas.map(d=>esc(d.nome)+' ('+esc(d.cod)+(d.turma!=null?', turma '+esc(d.turma):'')+')').join(' | ');
-  const html=`<html><head><meta charset="UTF-8"><title>Grade UFSM</title><style>body{font-family:sans-serif;padding:24px}h2{color:#1B4332;margin-bottom:16px}table{border-collapse:collapse;width:100%}th{background:#1B4332;color:white;padding:10px;font-size:12px}</style></head><body><h2>Grade Horária — 2024/2</h2>${tabela}<p style="margin-top:20px;font-size:11px;color:#555;">Disciplinas: ${lista}</p></body></html>`;
+  const periodo=periodoAtual();
+  const html=`<html><head><meta charset="UTF-8"><title>Grade UFSM</title><style>body{font-family:sans-serif;padding:24px}h2{color:#1B4332;margin-bottom:16px}table{border-collapse:collapse;width:100%}th{background:#1B4332;color:white;padding:10px;font-size:12px}</style></head><body><h2>Grade Horária — ${periodo}</h2>${tabela}<p style="margin-top:20px;font-size:11px;color:#555;">Disciplinas: ${lista}</p></body></html>`;
   const a=document.createElement('a');
   a.href=URL.createObjectURL(new Blob([html],{type:'text/html'}));
-  a.download='grade_ufsm_2024_2.html';a.click();
+  a.download='grade_ufsm_'+periodo.replace('/','_')+'.html';a.click();
   mostrarToast('⬇ Grade baixada!');
 }
 
@@ -920,6 +923,7 @@ function mostrarToast(msg){
 }
 
 document.addEventListener('keydown',e=>{if(e.key==='Escape'){fecharModalDisc();}});
+document.getElementById('gradeCardTitle').textContent='📅 Grade Horária — '+periodoAtual();
 renderGrade();renderSelecionadas();
 </script>
 </body>
