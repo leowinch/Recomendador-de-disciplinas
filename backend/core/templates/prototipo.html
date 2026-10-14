@@ -7,6 +7,10 @@
 
 <script src="https://unpkg.com/htmx.org@1.9.10"></script>
 <script src="https://unpkg.com/htmx.org/dist/ext/json-enc.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<script>
+  pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+</script>
 
 <link href="https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
 <style>
@@ -231,17 +235,12 @@ body{font-family:'DM Sans',sans-serif;background:var(--fundo);color:var(--texto)
 </style>
 </head>
 
-<!--
-  hx-headers injeta o CSRF token do Django em toda requisição feita a partir
-  deste <body> (POST/PUT/DELETE exigem isso). Isto só funciona se esse arquivo
-  for servido via template do Django (ex: TemplateView), não como HTML estático puro.
--->
 <body hx-headers='{"X-CSRFToken": "{{ csrf_token }}"}'>
 
 <!-- TÍTULO -->
 <div class="page-title-bar">
   <div class="page-title">Recomendação de Disciplinas — UFSM</div>
-  <div class="page-sub"></div>
+  <div class="page-sub">Sistemas de Informação · UFSM</div>
 </div>
 
 <!-- LAYOUT -->
@@ -265,12 +264,31 @@ body{font-family:'DM Sans',sans-serif;background:var(--fundo);color:var(--texto)
       </div>
     </div>
 
-    <!-- CURSADAS: DCGs concluídas do histórico — é o que alimenta 'codigos' no POST /api/recomendar/ -->
+    <!-- CURSADAS: DCGs concluídas do histórico -->
     <div class="ss">
       <div class="st"><span class="sbadge">✓</span> Complementares Cursadas <span style="margin-left:auto;font-size:11px;font-weight:600;color:var(--verde);" id="cursadasCount">0</span></div>
       <div class="tags-wrap" id="cursadasTags"></div>
       <div id="cursadasInfo" style="font-size:10px;color:var(--texto-sec);margin-top:6px;line-height:1.4;">
         Envie o histórico para preencher.
+      </div>
+    </div>
+
+    <!-- TÓPICOS DE INTERESSE -->
+    <div class="ss">
+      <div class="st">
+        <span class="sbadge">🎯</span> Tópicos de Interesse 
+        <span style="margin-left:auto;font-size:11px;font-weight:600;color:var(--verde);" id="topicosCount">0</span>
+      </div>
+      
+      <div style="position:relative; margin-bottom:8px;">
+        <input type="text" class="sinput" id="inputTopico" placeholder="Ex: IA, Web, Saúde, Robótica…" onkeydown="tratarInputTopico(event)">
+        <span style="position:absolute;right:8px;top:50%;transform:translateY(-50%);font-size:11px;color:var(--texto-sec);cursor:pointer;" onclick="adicionarTopico()">＋</span>
+      </div>
+
+      <div class="tags-wrap" id="topicosTags"></div>
+      
+      <div style="font-size:10px;color:var(--texto-sec);margin-top:6px;line-height:1.4;">
+        Pressione <kbd>Enter</kbd> para adicionar.
       </div>
     </div>
 
@@ -284,22 +302,22 @@ body{font-family:'DM Sans',sans-serif;background:var(--fundo);color:var(--texto)
       <div id="discResultados" style="max-height:150px;overflow-y:auto;margin-top:5px;"></div>
     </div>
 
-    <!-- RECOMENDAR — htmx faz o POST /api/recomendar/ (DCGs); o mesmo clique busca as obrigatórias -->
+    <!-- RECOMENDAR — envia codigos + topicos via hx-vals -->
     <div class="ss">
       <button class="btn-p"
               id="btnRecomendar"
               hx-ext="json-enc"
               hx-post="/api/recomendar/"
-              hx-vals='js:{codigos: getCodigosCursados()}'
+              hx-vals='js:{codigos: getCodigosCursados(), topicos: getTopicosInteresse()}'
               hx-swap="none"
               hx-indicator="#recLoading"
               hx-disabled-elt="this">
         ✨ Pedir Recomendação
       </button>
       <p id="recLoading" class="htmx-indicator" style="font-size:10px;color:var(--texto-sec);text-align:center;margin-top:5px;">
-        Analisando histórico…
+        Analisando histórico e interesses…
       </p>
-      <p style="font-size:10px;color:var(--texto-sec);text-align:center;margin-top:5px;line-height:1.5;">O sistema mostra as obrigatórias pendentes e sugere complementares pelo seu histórico</p>
+      <p style="font-size:10px;color:var(--texto-sec);text-align:center;margin-top:5px;line-height:1.5;">O sistema mostra as obrigatórias pendentes e sugere complementares pelo seu histórico e tópicos de interesse</p>
     </div>
 
     <!-- SELECIONADAS -->
@@ -347,7 +365,7 @@ body{font-family:'DM Sans',sans-serif;background:var(--fundo);color:var(--texto)
 
     <!--
       RESULTADO DA RECOMENDAÇÃO, em duas abas: obrigatórias pendentes
-      (/api/obrigatorias-pendentes/) e clusters baseados nas DCGs (/api/recomendar/)
+      (/api/obrigatorias-pendentes/) e clusters baseados nas DCGs e tópicos (/api/recomendar/)
     -->
     <div class="card" id="rankingCard" style="display:none;">
       <div class="card-h">
@@ -355,7 +373,7 @@ body{font-family:'DM Sans',sans-serif;background:var(--fundo);color:var(--texto)
         <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;">
           <div class="tab-bar">
             <button class="tab on" id="abaObrig" onclick="setAbaRec('obrig')">Obrigatórias</button>
-            <button class="tab" id="abaDcg" onclick="setAbaRec('dcg')">Baseadas nas DCGs</button>
+            <button class="tab" id="abaDcg" onclick="setAbaRec('dcg')">Baseadas nas DCGs e Tópicos</button>
           </div>
           <span style="font-size:10px;color:var(--texto-sec);background:var(--fundo);padding:3px 9px;border-radius:20px;border:1px solid var(--borda);" id="rankingInfo">—</span>
         </div>
@@ -365,14 +383,8 @@ body{font-family:'DM Sans',sans-serif;background:var(--fundo);color:var(--texto)
       </div>
       <div class="card-b" id="dcgView" style="display:none;">
         <div class="rec-dica">
-          💡 Disciplinas agrupadas por similaridade com o que você já cursou.
+          💡 Disciplinas agrupadas por similaridade com seu histórico e tópicos de interesse.
         </div>
-        <!--
-          Filtros por tipo/área/dia/turno desligados — dependem de campos (tipo,
-          area, slots) que a API ainda não devolve para os clusters. Reativar
-          quando /api/recomendar/ (ou uma URL de detalhe da disciplina) trouxer
-          esses dados.
-        -->
         <div id="rankingList"></div>
       </div>
     </div>
@@ -409,6 +421,7 @@ let discPendente=null;    // detalhe da disciplina aberta no modal
 let turmaPendente=null;   // turma marcada no modal
 let modalSeq=0;           // descarta detalhe que chegue depois de o modal ter trocado de disciplina
 let codigosCursados = []; // DCGs concluídas, preenchidas pelo upload do histórico
+let topicosInteresse = [];// Tópicos de interesse inseridos manualmente
 let historico=null;       // resposta do /api/importar-historico/ (curso, ingresso, disciplinas)
 let abaRec='obrig';       // aba aberta no card de recomendações
 const infoRec={obrig:'—',dcg:'—'}; // contador de cada aba, mostrado ao lado delas
@@ -431,13 +444,61 @@ function conflitosCom(horarios,ignorarCod){
     a.dia===b.dia&&minutos(a.inicio)<minutos(b.fim)&&minutos(b.inicio)<minutos(a.fim))));
 }
 
-function getCodigosCursados(){
+function getCodigosCursados() {
   return codigosCursados;
 }
 
-// ── INTEGRAÇÃO COM /api/recomendar/ ──
-// hx-swap="none" no botão: quem desenha a resposta é este listener, reaproveitando
-// o JS de renderização já existente em vez de fazer swap direto de HTML.
+function getTopicosInteresse() {
+  return topicosInteresse;
+}
+
+// ── GESTÃO DE TÓPICOS DE INTERESSE ──
+function tratarInputTopico(event) {
+  if (event.key === 'Enter') {
+    event.preventDefault();
+    adicionarTopico();
+  }
+}
+
+function adicionarTopico() {
+  const input = document.getElementById('inputTopico');
+  const valor = input.value.trim().toLowerCase();
+
+  if (!valor) return;
+
+  if (topicosInteresse.includes(valor)) {
+    mostrarToast('⚠️ Tópico já adicionado!');
+    input.value = '';
+    return;
+  }
+
+  topicosInteresse.push(valor);
+  input.value = '';
+  renderTopicos();
+}
+
+function removerTopico(topico) {
+  topicosInteresse = topicosInteresse.filter(t => t !== topico);
+  renderTopicos();
+}
+
+function renderTopicos() {
+  const container = document.getElementById('topicosTags');
+  const count = document.getElementById('topicosCount');
+
+  if (count) count.textContent = topicosInteresse.length;
+  
+  if (container) {
+    container.innerHTML = topicosInteresse.map(t => `
+      <span class="dtag" style="background:#E0E7FF; color:#3730A3; border-color:#C7D2FE;">
+        ${esc(t)} 
+        <span onclick="removerTopico('${esc(t)}')" style="cursor:pointer; margin-left:3px; font-weight:bold;">✕</span>
+      </span>
+    `).join('');
+  }
+}
+
+// ── INTEGRAÇÃO HTMX COM /api/recomendar/ ──
 document.body.addEventListener('htmx:afterRequest', function(evt){
   if(evt.detail.pathInfo.requestPath !== '/api/recomendar/') return;
 
@@ -462,23 +523,25 @@ document.body.addEventListener('htmx:afterRequest', function(evt){
   mostrarClusters(data.clusters||[]);
 });
 
-// Sem histórico não há o que enviar: barra a requisição antes de sair. Com histórico,
-// as obrigatórias são buscadas sempre; o POST das DCGs só sai se houver alguma concluída.
 document.body.addEventListener('htmx:beforeRequest', function(evt){
   if(evt.detail.pathInfo.requestPath !== '/api/recomendar/') return;
-  if(!historico){
+  
+  if(!historico && !topicosInteresse.length){
     evt.preventDefault();
-    mostrarToast('⚠️ Envie o histórico escolar primeiro');
+    mostrarToast('⚠️ Envie o histórico escolar ou insira tópicos de interesse');
     return;
   }
-  carregarObrigatorias();
-  if(!codigosCursados.length){
+
+  if(historico){
+    carregarObrigatorias();
+  }
+
+  if(!codigosCursados.length && !topicosInteresse.length){
     evt.preventDefault();
     mostrarClusters([]);
   }
 });
 
-// htmx dispara esse evento em qualquer falha de rede/timeout (antes mesmo de haver resposta)
 document.body.addEventListener('htmx:sendError', function(evt){
   if(evt.detail.pathInfo.requestPath !== '/api/recomendar/') return;
   mostrarToast('⚠️ Não foi possível conectar ao servidor');
@@ -524,9 +587,9 @@ function mostrarClusters(clusters){
   setInfoRec('dcg',clusters.length+' grupo'+(clusters.length===1?'':'s'));
 
   if(!clusters.length){
-    list.innerHTML=codigosCursados.length
-      ? '<div class="empty"><div class="empty-i">🔍</div><div class="empty-t">Nenhuma recomendação encontrada</div><div class="empty-s">Tente atualizar seu histórico</div></div>'
-      : '<div class="empty"><div class="empty-i">🔍</div><div class="empty-t">Nenhuma complementar concluída no histórico</div><div class="empty-s">Essas recomendações partem das DCGs que você já cursou</div></div>';
+    list.innerHTML=(codigosCursados.length || topicosInteresse.length)
+      ? '<div class="empty"><div class="empty-i">🔍</div><div class="empty-t">Nenhuma recomendação encontrada</div><div class="empty-s">Tente atualizar seu histórico ou adicionar novos tópicos de interesse</div></div>'
+      : '<div class="empty"><div class="empty-i">🔍</div><div class="empty-t">Nenhum histórico ou tópico informado</div><div class="empty-s">Envie seu histórico ou adicione tópicos para receber recomendações</div></div>';
     return;
   }
 
@@ -546,7 +609,7 @@ async function carregarObrigatorias(){
   const vazio=(icone,titulo,sub)=>`<div class="empty"><div class="empty-i">${icone}</div><div class="empty-t">${esc(titulo)}</div><div class="empty-s">${esc(sub)}</div></div>`;
   const falha=(titulo,sub)=>{setInfoRec('obrig','—');list.innerHTML=vazio('⚠️',titulo,sub);};
 
-  if(!historico.curso||!historico.ingresso){
+  if(!historico||!historico.curso||!historico.ingresso){
     falha('Não foi possível ler o cabeçalho do histórico','Curso ou período de ingresso não encontrado no PDF');
     return;
   }
@@ -587,7 +650,6 @@ function mostrarObrigatorias(data){
     </div>`;
   const semItens=t=>`<div style="font-size:11px;color:var(--texto-sec);padding:2px 0 12px;">${t}</div>`;
 
-  // Atrasadas agrupadas pelo semestre do currículo a que pertencem (já vêm ordenadas)
   const porPeriodo=new Map();
   data.atrasadas.forEach(d=>{
     if(!porPeriodo.has(d.periodo))porPeriodo.set(d.periodo,[]);
@@ -645,9 +707,6 @@ function adicionar(d,turma){
 }
 
 // ── GRADE ──
-// Linhas de 30 min, do primeiro início ao último fim entre as selecionadas. Cada célula
-// lista quem ocupa aquele meio horário (mais de uma = conflito); 'primeira' marca a
-// célula onde a aula começa, que é a única que leva o nome.
 function montarGrade(){
   const comHorario=selecionadas.filter(d=>d.horarios.length);
   if(!comHorario.length)return null;
@@ -732,7 +791,7 @@ function filtrarDisc(q){
 }
 
 async function buscarDisc(q){
-  const seq=++buscaSeq; // resposta de uma busca antiga que chegue depois é ignorada
+  const seq=++buscaSeq;
   const w=document.getElementById('discResultados');
   const msg=t=>`<div style="font-size:11px;color:var(--texto-sec);padding:6px;">${t}</div>`;
   let data;
@@ -779,7 +838,6 @@ async function abrirModalDisc(cod){
 
   discPendente=d;
   const sel=selecionadas.find(s=>s.cod===d.codigo);
-  // Já na grade: marca a turma escolhida. Senão, sugere a primeira sem conflito.
   turmaPendente=sel
     ? d.turmas.find(t=>t.turma===sel.turma)||null
     : d.turmas.find(t=>!conflitosCom(t.horarios).length)||d.turmas[0]||null;
@@ -832,6 +890,7 @@ function fecharModalDisc(){
   document.getElementById('modalDisc').classList.remove('open');
   discPendente=null;turmaPendente=null;
 }
+
 function confirmarAdicionar(){
   if(!discPendente)return;
   adicionar(discPendente,turmaPendente);
@@ -854,7 +913,7 @@ async function handleUpload(inp){
   if(!inp.files.length)return;
   const form=new FormData();
   form.append('arquivo',inp.files[0]);
-  inp.value=''; // permite reenviar o mesmo arquivo
+  inp.value='';
   mostrarToast('📄 Lendo histórico…');
 
   let data;
@@ -882,15 +941,16 @@ async function handleUpload(inp){
 }
 
 function renderCursadas(){
-  document.getElementById('cursadasCount').textContent=codigosCursados.length;
-  const wrap=document.getElementById('cursadasTags');
-  wrap.innerHTML='';
-  codigosCursados.forEach(c=>{
-    const tag=document.createElement('span');
-    tag.className='dtag';
-    tag.textContent=c;
-    wrap.appendChild(tag);
-  });
+  const count = document.getElementById('cursadasCount');
+  if (count) count.textContent = codigosCursados.length;
+  const wrap = document.getElementById('cursadasTags');
+  if (!wrap) return;
+
+  if (codigosCursados.length === 0) {
+    wrap.innerHTML = '<span style="font-size:10px;color:var(--texto-sec);">Nenhum histórico importado</span>';
+  } else {
+    wrap.innerHTML = codigosCursados.map(cod => `<span class="dtag">${esc(cod)}</span>`).join('');
+  }
 }
 
 // ── DOWNLOAD ──
@@ -924,7 +984,7 @@ function mostrarToast(msg){
 
 document.addEventListener('keydown',e=>{if(e.key==='Escape'){fecharModalDisc();}});
 document.getElementById('gradeCardTitle').textContent='📅 Grade Horária — '+periodoAtual();
-renderGrade();renderSelecionadas();
+renderGrade();renderSelecionadas();renderTopicos();renderCursadas();
 </script>
 </body>
-</html>
+</html> 
