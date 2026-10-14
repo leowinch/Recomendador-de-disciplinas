@@ -12,17 +12,22 @@ class RecomendacaoView(APIView):
     def post(self, request):
         # Captura os dados enviados no corpo do JSON pelo front-end
         codigos = request.data.get('codigos', [])
+        topicos = request.data.get('topicos', [])
         
-        # Validação simples
-        if not codigos or not isinstance(codigos, list):
+        if not isinstance(codigos, list):
+            codigos = []
+        if not isinstance(topicos, list):
+            topicos = []
+
+        if not codigos and not topicos:
             return Response(
-                {"erro": "Envie uma lista de códigos no campo 'codigos'."},
+                {"erro": "Envie ao menos uma disciplina cursada ou um tópico de interesse."},
                 status=status.HTTP_400_BAD_REQUEST
             )
 
         try:
             # Chama a função de IA criada no services.py
-            resultado = gerar_recomendacoes_agrupadas(codigos=codigos)
+            resultado = gerar_recomendacoes_agrupadas(codigos=codigos, topicos=topicos)
             
             return Response({
                 "sucesso": True,

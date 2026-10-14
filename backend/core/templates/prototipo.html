@@ -7,6 +7,10 @@
 
 <script src="https://unpkg.com/htmx.org@1.9.10"></script>
 <script src="https://unpkg.com/htmx.org/dist/ext/json-enc.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<script>
+  pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+</script>
 
 <link href="https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
 <style>
@@ -213,17 +217,12 @@ body{font-family:'DM Sans',sans-serif;background:var(--fundo);color:var(--texto)
 </style>
 </head>
 
-<!--
-  hx-headers injeta o CSRF token do Django em toda requisição feita a partir
-  deste <body> (POST/PUT/DELETE exigem isso). Isto só funciona se esse arquivo
-  for servido via template do Django (ex: TemplateView), não como HTML estático puro.
--->
 <body hx-headers='{"X-CSRFToken": "{{ csrf_token }}"}'>
 
 <!-- TÍTULO -->
 <div class="page-title-bar">
   <div class="page-title">Recomendação de Disciplinas — UFSM</div>
-  <div class="page-sub">Sistemas de Informação · Semestre 2024/2 · João Pedro Melo</div>
+  <div class="page-sub">Sistemas de Informação · UFSM</div>
 </div>
 
 <!-- LAYOUT -->
@@ -232,7 +231,7 @@ body{font-family:'DM Sans',sans-serif;background:var(--fundo);color:var(--texto)
   <!-- SIDEBAR -->
   <div class="sidebar">
 
-    <!-- UPLOAD (endpoint de upload ainda não existe — mantido como simulação local) -->
+    <!-- UPLOAD -->
     <div class="ss">
       <div class="st"><span class="sbadge">📄</span> Histórico Escolar</div>
       <div class="upload-area">
@@ -247,18 +246,39 @@ body{font-family:'DM Sans',sans-serif;background:var(--fundo);color:var(--texto)
       </div>
     </div>
 
-    <!-- CURSADAS: hoje é o estado que alimenta 'codigos' no POST /api/recomendar/ -->
+    <!-- CURSADAS -->
     <div class="ss">
-      <div class="st"><span class="sbadge">✓</span> Já Cursadas <span style="margin-left:auto;font-size:11px;font-weight:600;color:var(--verde);" id="cursadasCount">3</span></div>
+      <div class="st"><span class="sbadge">✓</span> Já Cursadas <span style="margin-left:auto;font-size:11px;font-weight:600;color:var(--verde);" id="cursadasCount">0</span></div>
       <div class="tags-wrap" id="cursadasTags">
-        <span class="dtag">ELC1010</span><span class="dtag">ELC1020</span><span class="dtag">ELC1030</span>
+        <!-- Preenchido via Upload do PDF ou vazio até importar -->
       </div>
       <div style="font-size:10px;color:var(--texto-sec);margin-top:6px;line-height:1.4;">
-        Lista fixa por enquanto — deve vir do upload do histórico quando esse endpoint existir.
+        Lista de disciplinas extraídas do histórico.
       </div>
     </div>
 
-    <!-- ADICIONAR (busca manual — usa o catálogo local de exemplo DISC) -->
+    <!-- TÓPICOS DE INTERESSE -->
+    <div class="ss">
+      <div class="st">
+        <span class="sbadge">🎯</span> Tópicos de Interesse 
+        <span style="margin-left:auto;font-size:11px;font-weight:600;color:var(--verde);" id="topicosCount">0</span>
+      </div>
+      
+      <div style="position:relative; margin-bottom:8px;">
+        <input type="text" class="sinput" id="inputTopico" placeholder="Ex: IA, Web, Saúde, Robótica…" onkeydown="tratarInputTopico(event)">
+        <span style="position:absolute;right:8px;top:50%;transform:translateY(-50%);font-size:11px;color:var(--texto-sec);cursor:pointer;" onclick="adicionarTopico()">＋</span>
+      </div>
+
+      <div class="tags-wrap" id="topicosTags">
+        <!-- Tags dinâmicas -->
+      </div>
+      
+      <div style="font-size:10px;color:var(--texto-sec);margin-top:6px;line-height:1.4;">
+        Pressione <kbd>Enter</kbd> para adicionar.
+      </div>
+    </div>
+
+    <!-- ADICIONAR (busca manual) -->
     <div class="ss">
       <div class="st"><span class="sbadge">＋</span> Adicionar Disciplina</div>
       <div style="position:relative;">
@@ -268,22 +288,22 @@ body{font-family:'DM Sans',sans-serif;background:var(--fundo);color:var(--texto)
       <div id="discResultados" style="max-height:150px;overflow-y:auto;margin-top:5px;"></div>
     </div>
 
-    <!-- RECOMENDAR — integrado via htmx ao POST /api/recomendar/ -->
+    <!-- RECOMENDAR (envia codigos + topicos via hx-vals) -->
     <div class="ss">
       <button class="btn-p"
               id="btnRecomendar"
               hx-ext="json-enc"
               hx-post="/api/recomendar/"
-              hx-vals='js:{codigos: getCodigosCursados()}'
+              hx-vals='js:{codigos: getCodigosCursados(), topicos: getTopicosInteresse()}'
               hx-swap="none"
               hx-indicator="#recLoading"
               hx-disabled-elt="this">
         ✨ Pedir Recomendação
       </button>
       <p id="recLoading" class="htmx-indicator" style="font-size:10px;color:var(--texto-sec);text-align:center;margin-top:5px;">
-        Analisando histórico…
+        Analisando histórico e interesses…
       </p>
-      <p style="font-size:10px;color:var(--texto-sec);text-align:center;margin-top:5px;line-height:1.5;">O sistema analisa seu histórico e sugere as melhores disciplinas</p>
+      <p style="font-size:10px;color:var(--texto-sec);text-align:center;margin-top:5px;line-height:1.5;">O sistema analisa seu perfil e sugere as melhores disciplinas</p>
     </div>
 
     <!-- SELECIONADAS -->
@@ -303,11 +323,10 @@ body{font-family:'DM Sans',sans-serif;background:var(--fundo);color:var(--texto)
   <!-- MAIN -->
   <div class="main-content">
 
-    <!-- GRADE: só preenche para disciplinas que têm horário (hoje só as adicionadas via busca manual,
-         já que /api/recomendar/ não devolve turma/horário ainda) -->
+    <!-- GRADE -->
     <div class="card">
       <div class="card-h">
-        <div class="card-t">📅 Grade Horária — 2024/2</div>
+        <div class="card-t">📅 Grade Horária</div>
         <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;">
           <div class="tab-bar">
             <button class="tab on" onclick="setTab(this,'grade')">Grade</button>
@@ -333,13 +352,7 @@ body{font-family:'DM Sans',sans-serif;background:var(--fundo);color:var(--texto)
       </div>
     </div>
 
-    <!--
-      OBRIGATÓRIAS PENDENTES — desligado por enquanto.
-      Precisa de uma URL tipo GET /api/obrigatorias-pendentes/ que compare o
-      currículo do curso com o histórico do aluno. Reativar quando existir.
-    -->
-
-    <!-- RESULTADO DA RECOMENDAÇÃO (clusters vindos de /api/recomendar/) -->
+    <!-- RESULTADO DA RECOMENDAÇÃO -->
     <div class="card" id="rankingCard" style="display:none;">
       <div class="card-h">
         <div class="card-t">🏆 Disciplinas Recomendadas</div>
@@ -347,14 +360,8 @@ body{font-family:'DM Sans',sans-serif;background:var(--fundo);color:var(--texto)
       </div>
       <div class="card-b">
         <div style="font-size:11px;color:#78350F;margin-bottom:10px;padding:8px 10px;background:#FFF8E6;border-radius:7px;border-left:3px solid var(--ouro);">
-          💡 Disciplinas agrupadas por similaridade com o que você já cursou.
+          💡 Disciplinas agrupadas por similaridade com seu histórico e tópicos de interesse.
         </div>
-        <!--
-          Filtros por tipo/área/dia/turno desligados — dependem de campos (tipo,
-          area, slots) que a API ainda não devolve para os clusters. Reativar
-          quando /api/recomendar/ (ou uma URL de detalhe da disciplina) trouxer
-          esses dados.
-        -->
         <div id="rankingList"></div>
       </div>
     </div>
@@ -362,7 +369,7 @@ body{font-family:'DM Sans',sans-serif;background:var(--fundo);color:var(--texto)
   </div><!-- /main -->
 </div><!-- /app-wrap -->
 
-<!-- MODAL ADICIONAR DISC (busca manual) -->
+<!-- MODAL ADICIONAR DISC -->
 <div class="mwrap" id="modalDisc" onclick="fecharModalDisc()">
   <div class="modal" onclick="event.stopPropagation()">
     <div class="mhead">
@@ -384,11 +391,31 @@ body{font-family:'DM Sans',sans-serif;background:var(--fundo);color:var(--texto)
 const HORARIOS=['07:30','08:30','09:30','10:30','11:30','13:00','14:00','15:00','16:00','17:00'];
 const DIAS=['Seg','Ter','Qua','Qui','Sex'];
 
-/*
-  Catálogo local usado SÓ pela busca manual ("Adicionar Disciplina"), que ainda
-  não tem endpoint no Django. Quando existir (ex: GET /api/disciplina/?q=),
-  troca filtrarDisc() por uma chamada htmx e remove este array.
-*/
+async function extrairCodigosDCG(pdfBuffer) {
+  const loadingTask = pdfjsLib.getDocument({ data: pdfBuffer });
+  const pdf = await loadingTask.promise;
+  
+  let textoCompleto = '';
+
+  for (let i = 1; i <= pdf.numPages; i++) {
+    const page = await pdf.getPage(i);
+    const content = await page.getTextContent();
+    const textoPagina = content.items.map(item => item.str).join(' ');
+    textoCompleto += textoPagina + '\n';
+  }
+
+  const regexSecao = /Disciplinas Complementares de Graduação(.*?)(?:Formação Complementar|Núcleo de|Atividades Complementares)/s;
+  const matchSecao = textoCompleto.match(regexSecao);
+
+  if (!matchSecao) return [];
+
+  const textoDCG = matchSecao[1];
+  const regexCodigo = /\b[A-Z]{3,4}\d{3,5}\b/g;
+  const codigos = textoDCG.match(regexCodigo) || [];
+
+  return [...new Set(codigos)];
+}
+
 const DISC=[
   {cod:'ELC1045',nome:'Sistemas Operacionais II',cred:4,slots:[['Ter','08:30'],['Qui','08:30']],cor:'aa',prof:'Dr. Marco Aurélio',sala:'CT-201',tipo:'obrig'},
   {cod:'ELC1067',nome:'Redes de Computadores II',cred:4,slots:[['Seg','10:30'],['Qua','10:30']],cor:'av',prof:'Dra. Carla Freitas',sala:'CT-305',tipo:'obrig'},
@@ -402,18 +429,67 @@ const DISC=[
   {cod:'ELC1088',nome:'Banco de Dados II',cred:4,slots:[['Ter','14:00'],['Qui','14:00']],cor:'aa',prof:'Dra. Renata Lopes',sala:'CT-207',tipo:'obrig'},
 ];
 
-// Estado
-let selecionadas=[];      // itens normalizados: {cod, nome, cred, slots, prof, sala, tipo, cor}
-let discPendente=null;    // disciplina em avaliação no modal de busca manual
-let codigosCursados = ['ELC1010','ELC1020','ELC1030']; // popular via upload do histórico quando o endpoint existir
+// Estado da Aplicação
+let selecionadas = [];
+let discPendente = null;
+let codigosCursados = []; // Começa vazio e é preenchido pelo upload do histórico em PDF
+let topicosInteresse = [];
 
-function getCodigosCursados(){
+function getCodigosCursados() {
   return codigosCursados;
 }
 
-// ── INTEGRAÇÃO COM /api/recomendar/ ──
-// hx-swap="none" no botão: quem desenha a resposta é este listener, reaproveitando
-// o JS de renderização já existente em vez de fazer swap direto de HTML.
+function getTopicosInteresse() {
+  return topicosInteresse;
+}
+
+// ── GESTÃO DE TÓPICOS DE INTERESSE ──
+function tratarInputTopico(event) {
+  if (event.key === 'Enter') {
+    event.preventDefault();
+    adicionarTopico();
+  }
+}
+
+function adicionarTopico() {
+  const input = document.getElementById('inputTopico');
+  const valor = input.value.trim().toLowerCase();
+
+  if (!valor) return;
+
+  if (topicosInteresse.includes(valor)) {
+    mostrarToast('⚠️ Tópico já adicionado!');
+    input.value = '';
+    return;
+  }
+
+  topicosInteresse.push(valor);
+  input.value = '';
+  renderTopicos();
+}
+
+function removerTopico(topico) {
+  topicosInteresse = topicosInteresse.filter(t => t !== topico);
+  renderTopicos();
+}
+
+function renderTopicos() {
+  const container = document.getElementById('topicosTags');
+  const count = document.getElementById('topicosCount');
+
+  if (count) count.textContent = topicosInteresse.length;
+  
+  if (container) {
+    container.innerHTML = topicosInteresse.map(t => `
+      <span class="dtag" style="background:#E0E7FF; color:#3730A3; border-color:#C7D2FE;">
+        ${t} 
+        <span onclick="removerTopico('${t}')" style="cursor:pointer; margin-left:3px; font-weight:bold;">✕</span>
+      </span>
+    `).join('');
+  }
+}
+
+// ── INTEGRAÇÃO HTMX COM /api/recomendar/ ──
 document.body.addEventListener('htmx:afterRequest', function(evt){
   if(evt.detail.pathInfo.requestPath !== '/api/recomendar/') return;
 
@@ -438,7 +514,6 @@ document.body.addEventListener('htmx:afterRequest', function(evt){
   mostrarClusters(data.clusters||[]);
 });
 
-// htmx dispara esse evento em qualquer falha de rede/timeout (antes mesmo de haver resposta)
 document.body.addEventListener('htmx:sendError', function(evt){
   if(evt.detail.pathInfo.requestPath !== '/api/recomendar/') return;
   mostrarToast('⚠️ Não foi possível conectar ao servidor');
@@ -450,7 +525,7 @@ function mostrarClusters(clusters){
   document.getElementById('rankingInfo').textContent=clusters.length+' grupo'+(clusters.length===1?'':'s');
 
   if(!clusters.length){
-    list.innerHTML='<div class="empty"><div class="empty-i">🔍</div><div class="empty-t">Nenhuma recomendação encontrada</div><div class="empty-s">Tente atualizar seu histórico</div></div>';
+    list.innerHTML='<div class="empty"><div class="empty-i">🔍</div><div class="empty-t">Nenhuma recomendação encontrada</div><div class="empty-s">Tente atualizar seu histórico ou adicionar novos tópicos</div></div>';
     setTimeout(()=>document.getElementById('rankingCard').scrollIntoView({behavior:'smooth',block:'start'}),80);
     return;
   }
@@ -477,10 +552,9 @@ function mostrarClusters(clusters){
 
 function adicionarPorCodigo(codigo,nome){
   if(selecionadas.find(s=>s.cod===codigo))return;
-  // Sem dados de turma ainda — entra na lista de selecionadas mas não aparece na grade.
   selecionadas.push({cod:codigo,nome,cred:null,slots:[],prof:null,sala:null,tipo:null,cor:null});
   renderGrade();renderSelecionadas();
-  // Se o mesmo código estiver visível no card de recomendações, atualiza o botão para "✓"
+  
   const rankingCard=document.getElementById('rankingCard');
   if(rankingCard.style.display!=='none'){
     document.querySelectorAll('#rankingList .ri').forEach(el=>{
@@ -585,13 +659,15 @@ function abrirModalDisc(cod){
     </div>
     <div style="font-size:11px;color:var(--texto-sec);margin-bottom:5px;">Horários</div>
     <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px;">
-      ${d.slots.map(s=>`<span style="background:var(--verde-palido);color:var(--verde);border:1px solid #B7E4C7;border-radius:20px;padding:4px 11px;font-size:12px;font-weight:500;">${s[0]} ${s[1]}</span>`).join('')}
+      ${d.slots.map(s=>`<span style="background:var(--verde-palido);color:var(--verde);border:1px solid #B7E4C7;border-radius:20px;padding:4px 11px;font-size:12px;font-weight:500;">${s[0]}${s[1]}</span>`).join('')}
     </div>
     ${c?`<div style="padding:9px;background:#FEE2E2;border-radius:7px;font-size:12px;color:#991B1B;border-left:3px solid #F87171;">⚠️ <strong>Conflito de horário</strong> detectado com disciplina já selecionada.</div>`:
         `<div style="padding:9px;background:#D8F3DC;border-radius:7px;font-size:12px;color:#166534;border-left:3px solid #52B788;">✅ Sem conflitos com a grade atual.</div>`}`;
   document.getElementById('modalDisc').classList.add('open');
 }
+
 function fecharModalDisc(){document.getElementById('modalDisc').classList.remove('open');discPendente=null;}
+
 function confirmarAdicionar(){
   if(!discPendente)return;
   if(!selecionadas.find(d=>d.cod===discPendente.cod))selecionadas.push(discPendente);
@@ -601,6 +677,7 @@ function confirmarAdicionar(){
   renderGrade();renderSelecionadas();
   mostrarToast('✅ '+discPendente.nome+' adicionada!');
 }
+
 function verificarConflito(d){return d.slots.some(s=>selecionadas.some(sel=>sel.slots&&sel.slots.some(ss=>ss[0]===s[0]&&ss[1]===s[1])));}
 
 // ── TABS ──
@@ -611,13 +688,36 @@ function setTab(el,tab){
   document.getElementById('listaView').style.display=tab==='lista'?'block':'none';
 }
 
-// ── UPLOAD (simulado — sem endpoint ainda) ──
+// ── UPLOAD ──
 function triggerUpload(){document.getElementById('fileInput').click();}
-function handleUpload(inp){
-  if(!inp.files.length)return;
-  document.getElementById('uploadStatus').style.display='flex';
-  document.getElementById('uploadCount').textContent=codigosCursados.length+' disciplinas';
-  mostrarToast('📄 Histórico importado (simulado) — endpoint de upload ainda não existe');
+
+async function handleUpload(inp) {
+  if (!inp.files.length) return;
+
+  const file = inp.files[0];
+  mostrarToast('⏳ Lendo PDF...');
+
+  try {
+    const arrayBuffer = await file.arrayBuffer();
+    const dcgs = await extrairCodigosDCG(new Uint8Array(arrayBuffer));
+
+    if (dcgs.length === 0) {
+      mostrarToast('⚠️ Nenhuma DCG encontrada no arquivo.');
+      return;
+    }
+
+    codigosCursados = dcgs;
+
+    document.getElementById('uploadStatus').style.display = 'flex';
+    document.getElementById('uploadCount').textContent = codigosCursados.length + ' disciplinas DCG';
+    
+    renderCursadas();
+    mostrarToast(`✅ ${dcgs.length} disciplinas DCG importadas!`);
+
+  } catch (error) {
+    console.error('Erro ao ler PDF:', error);
+    mostrarToast('❌ Erro ao ler o arquivo PDF.');
+  }
 }
 
 // ── DOWNLOAD ──
@@ -630,10 +730,10 @@ function downloadGrade(){
     }).join('');
     return`<tr><td style="padding:8px;border:1px solid #ddd;font-weight:600;background:#f5f5f5;font-size:11px;">${h}</td>${cells}</tr>`;
   }).join('');
-  const html=`<html><head><meta charset="UTF-8"><title>Grade UFSM</title><style>body{font-family:sans-serif;padding:24px}h2{color:#1B4332;margin-bottom:16px}table{border-collapse:collapse;width:100%}th{background:#1B4332;color:white;padding:10px;font-size:12px}</style></head><body><h2>Grade Horária — 2024/2</h2><table><thead><tr><th>Hora</th>${DIAS.map(d=>`<th>${d}</th>`).join('')}</tr></thead><tbody>${rows}</tbody></table><p style="margin-top:20px;font-size:11px;color:#555;">Disciplinas: ${selecionadas.map(d=>d.nome).join(' | ')}</p></body></html>`;
+  const html=`<html><head><meta charset="UTF-8"><title>Grade UFSM</title><style>body{font-family:sans-serif;padding:24px}h2{color:#1B4332;margin-bottom:16px}table{border-collapse:collapse;width:100%}th{background:#1B4332;color:white;padding:10px;font-size:12px}</style></head><body><h2>Grade Horária</h2><table><thead><tr><th>Hora</th>${DIAS.map(d=>`<th>${d}</th>`).join('')}</tr></thead><tbody>${rows}</tbody></table><p style="margin-top:20px;font-size:11px;color:#555;">Disciplinas: ${selecionadas.map(d=>d.nome).join(' | ')}</p></body></html>`;
   const a=document.createElement('a');
   a.href=URL.createObjectURL(new Blob([html],{type:'text/html'}));
-  a.download='grade_ufsm_2024_2.html';a.click();
+  a.download='grade_ufsm.html';a.click();
   mostrarToast('⬇ Grade baixada!');
 }
 
@@ -644,8 +744,22 @@ function mostrarToast(msg){
   setTimeout(()=>t.classList.remove('show'),2800);
 }
 
+function renderCursadas() {
+  const container = document.getElementById('cursadasTags');
+  const count = document.getElementById('cursadasCount');
+  
+  if (count) count.textContent = codigosCursados.length;
+  if (container) {
+    if (codigosCursados.length === 0) {
+      container.innerHTML = '<span style="font-size:10px;color:var(--texto-sec);">Nenhum histórico importado</span>';
+    } else {
+      container.innerHTML = codigosCursados.map(cod => `<span class="dtag">${cod}</span>`).join('');
+    }
+  }
+}
+
 document.addEventListener('keydown',e=>{if(e.key==='Escape'){fecharModalDisc();}});
-renderGrade();renderSelecionadas();
+renderGrade();renderSelecionadas();renderTopicos();renderCursadas();
 </script>
 </body>
 </html>
