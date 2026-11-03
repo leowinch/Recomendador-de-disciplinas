@@ -27,7 +27,10 @@ SITUACOES_REPROVADAS = ('Reprovado',)
 # Cabeçalho, repetido em toda página. Ex.:
 # "Curso: 314 - SISTEMAS DE INFORMAÇÃO                         Versão: 2009"
 # "Forma de Ingresso: Processo Seletivo - SiSu / MEC           Período: 2. Semestre de 2024"
-LINHA_CURSO = re.compile(r'^\s*Curso:\s*(?P<codigo>\d+)\s*-\s*(?P<nome>.+?)(?:\s{2,}|$)', re.MULTILINE)
+LINHA_CURSO = re.compile(
+    r'^\s*Curso:\s*(?P<codigo>\d+)\s*-\s*(?P<nome>.+?)(?:\s{2,}Vers[ãa]o:\s*(?P<versao>\S+)|\s{2,}|$)',
+    re.MULTILINE,
+)
 PERIODO_INGRESSO = re.compile(r'Per[ií]odo:\s*(?P<semestre>[12])\.\s*Semestre de\s+(?P<ano>\d{4})')
 
 
@@ -43,11 +46,18 @@ def ler_texto(arquivo) -> str:
 
 
 def extrair_cabecalho(texto: str) -> dict:
-    """Curso e período de ingresso do aluno; None no que não for encontrado."""
+    """
+    Curso (com a versão do currículo) e período de ingresso do aluno; None no que não
+    for encontrado. A versão é comparada com disciplina_curso.versao_curso.
+    """
     curso = LINHA_CURSO.search(texto)
     ingresso = PERIODO_INGRESSO.search(texto)
     return {
-        'curso': {'codigo': curso['codigo'], 'nome': curso['nome'].strip()} if curso else None,
+        'curso': {
+            'codigo': curso['codigo'],
+            'nome': curso['nome'].strip(),
+            'versao': curso['versao'],
+        } if curso else None,
         'ingresso': {'ano': int(ingresso['ano']), 'semestre': int(ingresso['semestre'])} if ingresso else None,
     }
 

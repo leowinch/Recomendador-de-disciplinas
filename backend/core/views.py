@@ -96,18 +96,24 @@ class HistoricoView(APIView):
 
 class ObrigatoriasPendentesView(APIView):
     """
-    Recebe 'curso', 'ingresso' e 'disciplinas' como devolvidos pelo
+    Recebe 'curso', 'versao', 'ingresso' e 'disciplinas' como devolvidos pelo
     /api/importar-historico/ e devolve as obrigatórias atrasadas e as do
-    semestre em que o aluno está.
+    semestre em que o aluno está, só da versão de currículo do aluno.
     """
     def post(self, request):
         curso = request.data.get('curso')
+        versao = request.data.get('versao')
         ingresso = request.data.get('ingresso')
         disciplinas = request.data.get('disciplinas', [])
 
         if not curso or not isinstance(curso, str):
             return Response(
                 {"erro": "Envie o nome do curso no campo 'curso'."},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        if not versao or not isinstance(versao, str):
+            return Response(
+                {"erro": "Envie a versão do currículo no campo 'versao'."},
                 status=status.HTTP_400_BAD_REQUEST
             )
         if (
@@ -125,10 +131,10 @@ class ObrigatoriasPendentesView(APIView):
                 status=status.HTTP_400_BAD_REQUEST
             )
 
-        resultado = recomendar_obrigatorias(curso, ingresso, disciplinas, timezone.localdate())
+        resultado = recomendar_obrigatorias(curso, versao, ingresso, disciplinas, timezone.localdate())
         if resultado is None:
             return Response(
-                {"erro": f"Currículo do curso {curso} não encontrado."},
+                {"erro": f"Currículo {versao} do curso {curso} não encontrado."},
                 status=status.HTTP_404_NOT_FOUND
             )
         return Response({"sucesso": True, **resultado}, status=status.HTTP_200_OK)

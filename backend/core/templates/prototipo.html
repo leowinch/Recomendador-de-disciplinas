@@ -609,8 +609,8 @@ async function carregarObrigatorias(){
   const vazio=(icone,titulo,sub)=>`<div class="empty"><div class="empty-i">${icone}</div><div class="empty-t">${esc(titulo)}</div><div class="empty-s">${esc(sub)}</div></div>`;
   const falha=(titulo,sub)=>{setInfoRec('obrig','—');list.innerHTML=vazio('⚠️',titulo,sub);};
 
-  if(!historico||!historico.curso||!historico.ingresso){
-    falha('Não foi possível ler o cabeçalho do histórico','Curso ou período de ingresso não encontrado no PDF');
+  if(!historico||!historico.curso||!historico.curso.versao||!historico.ingresso){
+    falha('Não foi possível ler o cabeçalho do histórico','Curso, versão do currículo ou período de ingresso não encontrado no PDF');
     return;
   }
   setInfoRec('obrig','…');
@@ -623,6 +623,7 @@ async function carregarObrigatorias(){
       headers:{'Content-Type':'application/json','X-CSRFToken':'{{ csrf_token }}'},
       body:JSON.stringify({
         curso:historico.curso.nome,
+        versao:historico.curso.versao,
         ingresso:historico.ingresso,
         disciplinas:historico.disciplinas,
       }),

@@ -47,16 +47,44 @@ def gerar_recomendacoes_agrupadas(codigos: list[str], topicos: list[str] = None,
 
             peso_interesse = 0.7  # ou deixa configurável depois
 
+            # Limite nulo traz todas; o corte vem depois de ficar só com as que têm horário
             cursor.execute(
                 """
-                SELECT * FROM buscar_por_interesse(%s::vector, %s::text[], %s, %s);
+                SELECT * FROM buscar_por_interesse(%s::vector, %s::text[], %s, NULL) r
+                WHERE EXISTS (SELECT 1 FROM disciplina_horario dh WHERE dh.codigo = r.codigo)
+                ORDER BY r.distancia
+                LIMIT %s;
                 """,
                 [str(vetor_interesse), codigos, peso_interesse, limite_busca]
             )
         else:
+            # Mesma consulta da função buscar_por_historico, mas só com disciplinas que
+            # têm horário. O filtro precisa vir antes do distinct on por nome: filtrando
+            # depois, um nome cujo código escolhido não tem horário (UFSM01301) sumiria
+            # mesmo havendo outro código com horário (ELC133, Qualidade de Software).
             cursor.execute(
-                "SELECT * FROM buscar_por_historico(%s, %s);",
-                [codigos, limite_busca]
+                """
+                SELECT codigo, nome, ementa, similaridade
+                FROM (
+                    SELECT DISTINCT ON (unaccent(lower(d.nome)))
+                        d.codigo, d.nome, d.ementa,
+                        avg(1 - (d.embedding <=> ref.embedding)) AS similaridade
+                    FROM disciplina d, disciplina ref
+                    WHERE ref.codigo = ANY(%(codigos)s)
+                      AND d.codigo != ALL(%(codigos)s)
+                      AND d.embedding IS NOT NULL
+                      AND ref.embedding IS NOT NULL
+                      AND EXISTS (SELECT 1 FROM disciplina_horario dh WHERE dh.codigo = d.codigo)
+                      AND unaccent(lower(d.nome)) NOT IN (
+                          SELECT unaccent(lower(nome)) FROM disciplina WHERE codigo = ANY(%(codigos)s)
+                      )
+                    GROUP BY d.codigo, d.nome, d.ementa, d.embedding
+                    ORDER BY unaccent(lower(d.nome)), avg(d.embedding <=> ref.embedding) DESC
+                ) sub
+                ORDER BY similaridade DESC
+                LIMIT %(limite)s;
+                """,
+                {"codigos": codigos, "limite": limite_busca}
             )
         colunas = [col[0] for col in cursor.description]
         recomendacoes = [dict(zip(colunas, row)) for row in cursor.fetchall()]

@@ -73,9 +73,15 @@ class Disciplina(models.Model):
 
 
 class DisciplinaCurso(models.Model):
-    pk = models.CompositePrimaryKey('codigo', 'id_curso')
+    # Um vínculo por versão de currículo: o mesmo (codigo, id_curso) se repete entre versões,
+    # e período e tipo da disciplina mudam de uma versão para outra.
+    id = models.AutoField(primary_key=True)
     codigo = models.ForeignKey(Disciplina, models.DO_NOTHING, db_column='codigo')
     id_curso = models.ForeignKey(Curso, models.DO_NOTHING, db_column='id_curso')
+    versao_curso = models.TextField(blank=True, null=True)
+    periodo = models.IntegerField(blank=True, null=True)
+    estrutura = models.TextField(blank=True, null=True)
+    tipo = models.TextField(blank=True, null=True)
 
     class Meta:
         managed = False

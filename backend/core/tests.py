@@ -49,9 +49,15 @@ class CabecalhoTests(SimpleTestCase):
             'Forma de Ingresso: Processo Seletivo - SiSu / MEC          Período: 2. Semestre de 2023\n'
         )
         self.assertEqual(extrair_cabecalho(texto), {
-            'curso': {'codigo': '314', 'nome': 'SISTEMAS DE INFORMAÇÃO'},
+            'curso': {'codigo': '314', 'nome': 'SISTEMAS DE INFORMAÇÃO', 'versao': '2009'},
             'ingresso': {'ano': 2023, 'semestre': 2},
         })
+
+    def test_curso_sem_versao(self):
+        self.assertEqual(
+            extrair_cabecalho('Curso: 314 - SISTEMAS DE INFORMAÇÃO\n')['curso'],
+            {'codigo': '314', 'nome': 'SISTEMAS DE INFORMAÇÃO', 'versao': None},
+        )
 
     def test_cabecalho_ausente(self):
         self.assertEqual(extrair_cabecalho('qualquer coisa'), {'curso': None, 'ingresso': None})

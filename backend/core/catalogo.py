@@ -106,6 +106,7 @@ def detalhar_disciplina(codigo: str) -> dict | None:
         DisciplinaCurso.objects.filter(codigo=codigo)
         .order_by('id_curso__nome')
         .values_list('id_curso__nome', flat=True)
+        .distinct()  # um vínculo por versão de currículo
     )
     d['turmas'] = turmas_por_codigo([codigo]).get(codigo, [])
     return d
