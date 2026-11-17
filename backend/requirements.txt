@@ -10,3 +10,4 @@ requests==2.34.2
 google-genai
 gunicorn
 whitenoise
+django-cors-headers==4.9.0
