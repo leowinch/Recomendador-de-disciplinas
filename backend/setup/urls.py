@@ -2,7 +2,9 @@ from django.contrib import admin
 from django.urls import path, include
 from django.apps import apps
 from rest_framework import serializers, viewsets, routers
-from django.views.generic import TemplateView
+import os
+
+from django.views.generic import RedirectView, TemplateView
 
 from core.views import RecomendacaoView, HistoricoView, ObrigatoriasPendentesView, BuscaDisciplinaView, DetalheDisciplinaView
 
@@ -26,8 +28,14 @@ for model in app_models:
     # 3. Registra a rota automática baseada no nome da tabela/modelo
     router.register(model._meta.model_name, viewset_cls, basename=model._meta.model_name)
 
+# Em produção a raiz redireciona para o frontend (Static Site no Render).
+# Sem FRONTEND_URL definida (ex.: desenvolvimento local), continua servindo o protótipo antigo.
+FRONTEND_URL = os.getenv('FRONTEND_URL', '').strip()
+home_view = (RedirectView.as_view(url=FRONTEND_URL, permanent=False) if FRONTEND_URL
+             else TemplateView.as_view(template_name='prototipo.html'))
+
 urlpatterns = [
-    path('', TemplateView.as_view(template_name='prototipo.html'), name='home'),
+    path('', home_view, name='home'),
     path('admin/', admin.site.urls),
     path('api/', include(router.urls)),
     path('api/recomendar/', RecomendacaoView.as_view(), name='recomendar'),
